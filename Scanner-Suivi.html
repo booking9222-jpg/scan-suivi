@@ -361,13 +361,11 @@
     manualZone.style.display = "none";
   });
 
-  // Étiquette : 1 par page, taille confortable
+  // STYLE ÉTIQUETTE LARGE (comme ton ancien PDF)
   function generateBarcodeWithLabel(barcodeValue, title, displayAsin = "") {
-    const labelMmWidth = 80;
-    const labelMmHeight = 45;
-    const pxPerMm = 4;
-    const canvasWidth = Math.round(labelMmWidth * pxPerMm);
-    const canvasHeight = Math.round(labelMmHeight * pxPerMm);
+    // Canvas large et haut
+    const canvasWidth = 800;
+    const canvasHeight = 600;
 
     const finalCanvas = document.createElement("canvas");
     finalCanvas.width = canvasWidth;
@@ -379,37 +377,42 @@
     ctx.textAlign = "center";
     ctx.fillStyle = "#000000";
 
+    // Code-barres
     const barcodeCanvas = document.createElement("canvas");
     JsBarcode(barcodeCanvas, String(barcodeValue || ""), {
       format: "CODE128",
       displayValue: false,
       margin: 0,
-      height: 60,
-      width: 1.6,
+      height: 120,
+      width: 2,
     });
 
-    const targetBarcodeWidth = canvasWidth - 32;
+    const targetBarcodeWidth = canvasWidth - 160;
     const barcodeScale = Math.min(targetBarcodeWidth / barcodeCanvas.width, 1);
     const barcodeDrawWidth = barcodeCanvas.width * barcodeScale;
     const barcodeDrawHeight = barcodeCanvas.height;
     const bx = (canvasWidth - barcodeDrawWidth) / 2;
-    let y = 10;
+    let y = 40;
     ctx.drawImage(barcodeCanvas, bx, y, barcodeDrawWidth, barcodeDrawHeight);
 
-    y += barcodeDrawHeight + 10;
-    ctx.font = "bold 16px Arial";
+    // ASIN en gros
+    y += barcodeDrawHeight + 30;
+    ctx.font = "bold 38px Arial";
+    ctx.fillStyle = "#000000";
     ctx.fillText(displayAsin || String(barcodeValue || ""), canvasWidth / 2, y);
 
-    y += 14;
-    ctx.font = "11px Arial";
-    ctx.fillStyle = "#666666";
+    // Valeur encodée
+    y += 30;
+    ctx.font = "20px Arial";
     ctx.fillText(String(barcodeValue || ""), canvasWidth / 2, y);
 
-    y += 14;
+    // Description produit multi-lignes
+    y += 36;
+    ctx.font = "20px Arial";
     ctx.fillStyle = "#000000";
-    ctx.font = "11px Arial";
+    ctx.textAlign = "center";
 
-    function wrapTextOnce(text, maxW, maxLines) {
+    function wrapTextMultiline(text, maxW, maxLines) {
       const words = String(text || "").split(/\s+/).filter(Boolean);
       const lines = [];
       let line = "";
@@ -432,15 +435,15 @@
       return lines;
     }
 
-    const lines = wrapTextOnce(title, canvasWidth - 30, 2);
+    const lines = wrapTextMultiline(title, canvasWidth - 160, 5);
     lines.forEach((line, i) => {
-      ctx.fillText(line, canvasWidth / 2, y + (i * 12));
+      ctx.fillText(line, canvasWidth / 2, y + (i * 26));
     });
 
     return finalCanvas;
   }
 
-  // PDF : 1 code-barres par page A4
+  // PDF : 1 étiquette par page A4, style ancien
   function downloadBarcodesPdf(matches, trackingValue) {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -449,8 +452,8 @@
 
     const marginSide = 15;
     const topMargin = 15;
-    const labelWidth = pageWidth - marginSide * 2;
-    const maxLabelHeight = pageHeight - topMargin - 20;
+    const labelMaxWidth = pageWidth - marginSide * 2;
+    const labelMaxHeight = pageHeight - topMargin - 20;
 
     matches.forEach((m, idx) => {
       if (idx > 0) doc.addPage();
@@ -463,15 +466,15 @@
       const imgData = canvas.toDataURL("image/png");
 
       const ratio = canvas.height / canvas.width;
-      let finalWidth = labelWidth;
+      let finalWidth = labelMaxWidth;
       let finalHeight = finalWidth * ratio;
-      if (finalHeight > maxLabelHeight) {
-        finalHeight = maxLabelHeight;
+      if (finalHeight > labelMaxHeight) {
+        finalHeight = labelMaxHeight;
         finalWidth = finalHeight / ratio;
       }
 
       const x = (pageWidth - finalWidth) / 2;
-      const y = topMargin + 6;
+      const y = topMargin + 8;
       doc.addImage(imgData, "PNG", x, y, finalWidth, finalHeight);
     });
 
