@@ -341,7 +341,6 @@
     if (e.key === "Enter") search(e.target.value);
   });
 
-  // Onglets Manuel / Caméra
   const tabManual = document.getElementById("tabManual");
   const tabCamera = document.getElementById("tabCamera");
   const manualZone = document.getElementById("manualZone");
@@ -361,9 +360,8 @@
     manualZone.style.display = "none";
   });
 
-  // STYLE ÉTIQUETTE LARGE (comme ton ancien PDF)
+  // STYLE ÉTIQUETTE large (proche de ton PDF)
   function generateBarcodeWithLabel(barcodeValue, title, displayAsin = "") {
-    // Canvas large et haut
     const canvasWidth = 800;
     const canvasHeight = 600;
 
@@ -377,7 +375,6 @@
     ctx.textAlign = "center";
     ctx.fillStyle = "#000000";
 
-    // Code-barres
     const barcodeCanvas = document.createElement("canvas");
     JsBarcode(barcodeCanvas, String(barcodeValue || ""), {
       format: "CODE128",
@@ -395,21 +392,16 @@
     let y = 40;
     ctx.drawImage(barcodeCanvas, bx, y, barcodeDrawWidth, barcodeDrawHeight);
 
-    // ASIN en gros
     y += barcodeDrawHeight + 30;
     ctx.font = "bold 38px Arial";
-    ctx.fillStyle = "#000000";
     ctx.fillText(displayAsin || String(barcodeValue || ""), canvasWidth / 2, y);
 
-    // Valeur encodée
     y += 30;
     ctx.font = "20px Arial";
     ctx.fillText(String(barcodeValue || ""), canvasWidth / 2, y);
 
-    // Description produit multi-lignes
     y += 36;
     ctx.font = "20px Arial";
-    ctx.fillStyle = "#000000";
     ctx.textAlign = "center";
 
     function wrapTextMultiline(text, maxW, maxLines) {
@@ -443,7 +435,7 @@
     return finalCanvas;
   }
 
-  // PDF : 1 étiquette par page A4, style ancien
+  // 1 étiquette par page A4, largeur limitée pour PDF plus léger
   function downloadBarcodesPdf(matches, trackingValue) {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -452,8 +444,8 @@
 
     const marginSide = 15;
     const topMargin = 15;
-    const labelMaxWidth = pageWidth - marginSide * 2;
-    const labelMaxHeight = pageHeight - topMargin - 20;
+    const labelMaxWidth = Math.min(pageWidth - marginSide * 2, 90); // ~90 mm max
+    const labelMaxHeight = pageHeight - topMargin - 25;
 
     matches.forEach((m, idx) => {
       if (idx > 0) doc.addPage();
@@ -481,7 +473,6 @@
     doc.save(`colis_${trackingValue}_codes-barres.pdf`);
   }
 
-  // Générateur direct par ASIN
   document.getElementById("genDirectBarcode").addEventListener("click", () => {
     const asin = document.getElementById("directAsinInput").value.trim();
     const resultDiv = document.getElementById("directBarcodeResult");
@@ -501,24 +492,6 @@
     canvas.style.border = "1px solid #ddd";
     canvas.style.borderRadius = "6px";
     resultDiv.appendChild(canvas);
-
-    const dlBtn = document.createElement('button');
-    dlBtn.className = 'btn';
-    dlBtn.style.marginTop = '10px';
-    dlBtn.textContent = '⬇️ Télécharger cette étiquette';
-    dlBtn.onclick = () => {
-      canvas.toBlob(blob => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `barcode_${asin}.png`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      });
-    };
-    resultDiv.appendChild(dlBtn);
   });
 
   // Caméra + flash
