@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Scanner Suivi → ASIN</title>
 
+  <!-- Librairies -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
@@ -19,11 +20,7 @@
       color: #111;
       padding: 0 12px;
     }
-
-    h1 {
-      font-size: 22px;
-    }
-
+    h1 { font-size: 22px; }
     .card {
       background: #fff;
       border: 1px solid #ddd;
@@ -32,11 +29,7 @@
       margin-bottom: 20px;
       box-shadow: 0 1px 3px rgba(0,0,0,0.08);
     }
-
-    input[type="file"] {
-      margin-bottom: 10px;
-    }
-
+    input[type="file"] { margin-bottom: 10px; }
     #scanInput {
       width: 100%;
       font-size: 22px;
@@ -45,56 +38,35 @@
       border-radius: 8px;
       box-sizing: border-box;
     }
-
     #status, #status2 {
       margin-top: 8px;
       font-size: 14px;
       color: #555;
     }
-
     table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 16px;
     }
-
     th, td {
       border: 1px solid #ddd;
       padding: 8px 10px;
       text-align: left;
       font-size: 14px;
     }
-
     th {
       background: #ff9900;
       color: #fff;
     }
-
-    tr:nth-child(even) {
-      background: #fafafa;
-    }
-
-    .empty {
-      color: #888;
-      font-style: italic;
-    }
-
-    .found {
-      color: #2e7d32;
-      font-weight: bold;
-    }
-
-    .notfound {
-      color: #c62828;
-      font-weight: bold;
-    }
-
+    tr:nth-child(even) { background: #fafafa; }
+    .empty { color: #888; font-style: italic; }
+    .found { color: #2e7d32; font-weight: bold; }
+    .notfound { color: #c62828; font-weight: bold; }
     #count {
       font-size: 13px;
       color: #555;
       margin-top: 6px;
     }
-
     .btn {
       background: #ff9900;
       color: #fff;
@@ -106,29 +78,22 @@
       margin-right: 8px;
       margin-bottom: 10px;
     }
-
-    .btn.stop {
-      background: #c62828;
-    }
-
+    .btn.stop { background: #c62828; }
     #cameraWrap {
       display: none;
       margin-top: 12px;
     }
-
     #reader {
       width: 100%;
       max-width: 500px;
       border-radius: 8px;
       overflow: hidden;
     }
-
     .tab-toggle {
       display: flex;
       gap: 8px;
       margin-bottom: 14px;
     }
-
     .tab-btn {
       flex: 1;
       padding: 10px;
@@ -139,15 +104,11 @@
       cursor: pointer;
       font-weight: bold;
     }
-
     .tab-btn.active {
       background: #ff9900;
       color: #fff;
     }
-
-    #manualZone {
-      display: block;
-    }
+    #manualZone { display: block; }
   </style>
 </head>
 <body>
@@ -248,7 +209,7 @@
         trackingNorm: normalize(r[tCol]),
         trackingRaw: r[tCol],
         asin: r[aCol],
-        productName: r[aCol + 1] || "" // si tu as une colonne product name juste après
+        productName: r[aCol + 1] || ""
       })).filter(r => r.trackingRaw);
 
       document.getElementById("status").innerHTML =
@@ -400,7 +361,7 @@
     manualZone.style.display = "none";
   });
 
-  // Étiquette compacte
+  // Étiquette : 1 par page, taille confortable
   function generateBarcodeWithLabel(barcodeValue, title, displayAsin = "") {
     const labelMmWidth = 80;
     const labelMmHeight = 45;
@@ -479,36 +440,39 @@
     return finalCanvas;
   }
 
+  // PDF : 1 code-barres par page A4
   function downloadBarcodesPdf(matches, trackingValue) {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
-    const left = 15;
-    const top = 10;
-    const headerH = 8;
-    const labelWidth = pageWidth - (left * 2);
-    const labelHeight = 60;
-    const gap = 15;
-    const firstY = top + headerH + 4;
-    const secondY = firstY + labelHeight + gap;
+
+    const marginSide = 15;
+    const topMargin = 15;
+    const labelWidth = pageWidth - marginSide * 2;
+    const maxLabelHeight = pageHeight - topMargin - 20;
 
     matches.forEach((m, idx) => {
-      if (idx > 0 && idx % 2 === 0) doc.addPage();
+      if (idx > 0) doc.addPage();
 
-      const posInPage = idx % 2;
-      if (posInPage === 0) {
-        doc.setFontSize(9);
-        doc.text(`Colis - N° de suivi: ${trackingValue}`, left, top + 2);
-      }
+      doc.setFontSize(10);
+      doc.text(`Colis - N° de suivi: ${trackingValue}`, marginSide, topMargin);
 
       const encodedValue = String(m.pdfBarcodeValue || m.asin || "").trim();
       const canvas = generateBarcodeWithLabel(encodedValue, m.productName || "", m.asin);
       const imgData = canvas.toDataURL("image/png");
-      const x = left;
-      const y = posInPage === 0 ? firstY : secondY;
 
-      doc.addImage(imgData, "PNG", x, y, labelWidth, labelHeight);
+      const ratio = canvas.height / canvas.width;
+      let finalWidth = labelWidth;
+      let finalHeight = finalWidth * ratio;
+      if (finalHeight > maxLabelHeight) {
+        finalHeight = maxLabelHeight;
+        finalWidth = finalHeight / ratio;
+      }
+
+      const x = (pageWidth - finalWidth) / 2;
+      const y = topMargin + 6;
+      doc.addImage(imgData, "PNG", x, y, finalWidth, finalHeight);
     });
 
     doc.save(`colis_${trackingValue}_codes-barres.pdf`);
@@ -593,6 +557,7 @@
         const torchFeature = caps && caps.torchFeature && caps.torchFeature();
         if (torchFeature) {
           torchBtn.style.display = "inline-block";
+          torchBtn.textContent = "🔦 Flash OFF";
           torchBtn.onclick = async () => {
             try {
               await torchFeature.apply(!torchFeature.value());
