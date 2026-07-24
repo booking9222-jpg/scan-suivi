@@ -82,6 +82,7 @@
 
   <div id="cameraZone" style="display:none;">
     <button class="btn" id="startCam">▶️ Démarrer la caméra</button>
+    <button class="btn" id="toggleFlash" style="display:none; background:#555;">🔦 Allumer le flash</button>
     <button class="btn stop" id="stopCam" style="display:none;">⏹ Arrêter</button>
     <div id="cameraWrap">
       <div id="reader"></div>
@@ -300,6 +301,7 @@ tabCamera.addEventListener("click", () => {
 let html5QrCode = null;
 let lastScanValue = "";
 let lastScanTime = 0;
+let flashEnabled = false;
 
 document.getElementById("startCam").addEventListener("click", async () => {
   const camStatus = document.getElementById("camStatus");
@@ -339,8 +341,46 @@ document.getElementById("startCam").addEventListener("click", async () => {
       () => { /* ignore frames without a code */ }
     );
     camStatus.textContent = "Caméra active — visez le code-barres du colis.";
+
+    // Affiche le bouton du flash uniquement si la caméra arrière prend en charge la torche.
+    const flashBtn = document.getElementById("toggleFlash");
+    try {
+      const capabilities = html5QrCode.getRunningTrackCapabilities();
+      if (capabilities && capabilities.torch) {
+        flashBtn.style.display = "inline-block";
+      } else {
+        flashBtn.style.display = "none";
+      }
+    } catch (_) {
+      flashBtn.style.display = "none";
+    }
   } catch (err) {
     camStatus.textContent = "❌ Impossible d'accéder à la caméra : " + err;
+  }
+});
+
+document.getElementById("toggleFlash").addEventListener("click", async () => {
+  const flashBtn = document.getElementById("toggleFlash");
+  const camStatus = document.getElementById("camStatus");
+  if (!html5QrCode) return;
+
+  try {
+    const capabilities = html5QrCode.getRunningTrackCapabilities();
+    if (!capabilities || !capabilities.torch) {
+      flashBtn.style.display = "none";
+      camStatus.textContent = "⚠️ Le flash n'est pas pris en charge par cette caméra.";
+      return;
+    }
+
+    flashEnabled = !flashEnabled;
+    await html5QrCode.applyVideoConstraints({
+      advanced: [{ torch: flashEnabled }]
+    });
+    flashBtn.textContent = flashEnabled ? "🔦 Éteindre le flash" : "🔦 Allumer le flash";
+  } catch (err) {
+    flashEnabled = false;
+    flashBtn.textContent = "🔦 Allumer le flash";
+    camStatus.textContent = "⚠️ Impossible de modifier le flash sur cet appareil.";
   }
 });
 
@@ -405,7 +445,7 @@ function generateBarcodeWithLabel(barcodeValue, title, displayAsin = "") {
   const padding = 12;
   const titleFontSize = 14;
   const asinFontSize = 16;
-  const metaFontSize = 11;
+  const metaFontSize = 18;
   const maxWidth = Math.max(barcodeCanvas.width, 320);
 
   const finalCanvas = document.createElement('canvas');
@@ -449,8 +489,8 @@ function generateBarcodeWithLabel(barcodeValue, title, displayAsin = "") {
   ctx.fillText(displayAsin || String(barcodeValue || ''), finalCanvas.width / 2, y + asinFontSize);
   y += asinFontSize + 6;
 
-  ctx.font = `${metaFontSize}px Arial`;
-  ctx.fillStyle = '#666666';
+  ctx.font = `bold ${metaFontSize}px Arial`;
+  ctx.fillStyle = '#000000';
   ctx.fillText(String(barcodeValue || ''), finalCanvas.width / 2, y + metaFontSize);
   y += metaFontSize + 8;
 
@@ -482,32 +522,45 @@ function downloadBarcode(canvasId, asin, title) {
 
 function downloadBarcodesPdf(matches, trackingValue) {
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
+
+  // Format compact 100 × 70 mm : une seule étiquette par page.
+  const doc = new jsPDF({
+    orientation: "landscape",
+    unit: "mm",
+    format: [100, 70],
+    compress: true
+  });
+
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const marginTop = 15;
-  const marginSide = 15;
-  const labelWidthMm = pageWidth - marginSide * 2;
-  let y = marginTop;
-
-  doc.setFontSize(14);
-  doc.text(`Colis - N° de suivi: ${trackingValue}`, marginSide, 10);
+  const marginSide = 5;
+  const headerY = 6;
+  const imageTop = 10;
+  const maxImageWidth = pageWidth - marginSide * 2;
+  const maxImageHeight = pageHeight - imageTop - 4;
 
   matches.forEach((m, idx) => {
+    if (idx > 0) doc.addPage([100, 70], "landscape");
+
+    doc.setFontSize(8);
+    doc.text(`Colis - N° de suivi: ${trackingValue}`, marginSide, headerY);
+
     const encodedValue = String(m.pdfBarcodeValue || m.asin || '').trim();
     const canvas = generateBarcodeWithLabel(encodedValue, m.productName || "", m.asin);
     const imgData = canvas.toDataURL("image/png");
-    const ratio = canvas.height / canvas.width;
-    const imgWidthMm = labelWidthMm;
-    const imgHeightMm = imgWidthMm * ratio;
 
-    if (y + imgHeightMm > pageHeight - marginTop) {
-      doc.addPage();
-      y = marginTop;
+    const ratio = canvas.height / canvas.width;
+    let imgWidthMm = maxImageWidth;
+    let imgHeightMm = imgWidthMm * ratio;
+
+    if (imgHeightMm > maxImageHeight) {
+      imgHeightMm = maxImageHeight;
+      imgWidthMm = imgHeightMm / ratio;
     }
 
-    doc.addImage(imgData, "PNG", marginSide, y, imgWidthMm, imgHeightMm);
-    y += imgHeightMm + 10;
+    const x = (pageWidth - imgWidthMm) / 2;
+    const y = imageTop + (maxImageHeight - imgHeightMm) / 2;
+    doc.addImage(imgData, "PNG", x, y, imgWidthMm, imgHeightMm, undefined, "FAST");
   });
 
   doc.save(`colis_${trackingValue}_codes-barres.pdf`);
@@ -520,6 +573,10 @@ function stopScanner() {
       html5QrCode = null;
     }).catch(() => {});
   }
+  flashEnabled = false;
+  const flashBtn = document.getElementById("toggleFlash");
+  flashBtn.style.display = "none";
+  flashBtn.textContent = "🔦 Allumer le flash";
   document.getElementById("startCam").style.display = "inline-block";
   document.getElementById("stopCam").style.display = "none";
   document.getElementById("cameraWrap").style.display = "none";
