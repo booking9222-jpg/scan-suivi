@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <title>Scanner Suivi → ASIN</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- adapte les chemins si besoin -->
   <script src="xlsx.full.min.js"></script>
   <script src="html5-qrcode.min.js"></script>
   <script src="JsBarcode.all.min.js"></script>
@@ -275,7 +276,7 @@ document.getElementById("scanInput").addEventListener("keydown", function(e) {
   if (e.key === "Enter") search(e.target.value);
 });
 
-// Onglets Manuel / Caméra
+// Onglets Manuel / Caméra (version d'origine)
 const tabManual = document.getElementById("tabManual");
 const tabCamera = document.getElementById("tabCamera");
 const manualZone = document.getElementById("manualZone");
@@ -295,7 +296,6 @@ tabCamera.addEventListener("click", () => {
   manualZone.style.display = "none";
 });
 
-// Scanner caméra avec tentative de flash
 let html5QrCode = null;
 let lastScanValue = "";
 let lastScanTime = 0;
@@ -337,21 +337,7 @@ document.getElementById("startCam").addEventListener("click", async () => {
       },
       () => {}
     );
-
-    // tentative d'activation de la torche si supportée
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-      const track = stream.getVideoTracks()[0];
-      const capabilities = track.getCapabilities ? track.getCapabilities() : {};
-      if (capabilities.torch) {
-        await track.applyConstraints({ advanced: [{ torch: true }] });
-        camStatus.textContent = "Caméra + flash actifs — visez le code-barres du colis.";
-      } else {
-        camStatus.textContent = "Caméra active — visez le code-barres du colis.";
-      }
-    } catch (e) {
-      camStatus.textContent = "Caméra active (flash non supporté) — visez le code-barres du colis.";
-    }
+    camStatus.textContent = "Caméra active — visez le code-barres du colis.";
   } catch (err) {
     camStatus.textContent = "❌ Impossible d'accéder à la caméra : " + err;
   }
@@ -403,9 +389,9 @@ document.getElementById("genDirectBarcode").addEventListener("click", () => {
     note.textContent = "ℹ️ Titre non trouvé dans le fichier chargé pour cet ASIN (chargez le fichier pour l'inclure automatiquement).";
     resultDiv.appendChild(note);
   }
-});
+}
 
-// ======= ÉTIQUETTE : chiffres plus gros / gras =======
+// chiffres plus gros / gras
 function generateBarcodeWithLabel(barcodeValue, title, displayAsin = "") {
   const barcodeCanvas = document.createElement('canvas');
   JsBarcode(barcodeCanvas, String(barcodeValue || ""), {
@@ -494,7 +480,7 @@ function downloadBarcode(canvasId, asin, title) {
   });
 }
 
-// ======= PDF : 1 étiquette par page + plus léger =======
+// 1 étiquette par page + image un peu réduite
 function downloadBarcodesPdf(matches, trackingValue) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -503,7 +489,6 @@ function downloadBarcodesPdf(matches, trackingValue) {
 
   const marginSide = 15;
   const topMargin = 18;
-
   const maxLabelWidthMm = Math.min(pageWidth - marginSide * 2, 90);
   const maxLabelHeightMm = pageHeight - topMargin - 25;
 
@@ -517,8 +502,7 @@ function downloadBarcodesPdf(matches, trackingValue) {
 
     const encodedValue = String(m.pdfBarcodeValue || m.asin || '').trim();
     const canvas = generateBarcodeWithLabel(encodedValue, m.productName || "", m.asin);
-
-    const imgData = canvas.toDataURL("image/jpeg", 0.85);
+    const imgData = canvas.toDataURL("image/png");
 
     const ratio = canvas.height / canvas.width;
     let imgWidthMm = maxLabelWidthMm;
@@ -532,7 +516,7 @@ function downloadBarcodesPdf(matches, trackingValue) {
     const x = (pageWidth - imgWidthMm) / 2;
     const y = topMargin + 5;
 
-    doc.addImage(imgData, "JPEG", x, y, imgWidthMm, imgHeightMm);
+    doc.addImage(imgData, "PNG", x, y, imgWidthMm, imgHeightMm);
   });
 
   doc.save(`colis_${trackingValue}_codes-barres.pdf`);
@@ -545,7 +529,7 @@ function stopScanner() {
       html5QrCode = null;
     }).catch(() => {});
   }
-  document.getElementById("startCam").style.display = "inline-block";
+  document.getElementById("startCam")..style.display = "inline-block";
   document.getElementById("stopCam").style.display = "none";
   document.getElementById("cameraWrap").style.display = "none";
   document.getElementById("camStatus").textContent = "";
