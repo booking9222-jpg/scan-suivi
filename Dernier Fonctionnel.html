@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<!-- saved from url=(1192)https://d2z0o16i8xm8ak.cloudfront.net/web/direct-files/75bfff85d8ddfa1f46e51bb5423d3298/76f2d6c9-d034-453c-8424-c541c3a301d5/54eee7a3.html?response-content-disposition=attachment%3B+filename%3D%22scan-tracking-asin.html%22%3B+filename%2A%3DUTF-8%27%27scan-tracking-asin.html&Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9kMnowbzE2aTh4bThhay5jbG91ZGZyb250Lm5ldC93ZWIvZGlyZWN0LWZpbGVzLzc1YmZmZjg1ZDhkZGZhMWY0NmU1MWJiNTQyM2QzMjk4Lzc2ZjJkNmM5LWQwMzQtNDUzYy04NDI0LWM1NDFjM2EzMDFkNS81NGVlZTdhMy5odG1sP3Jlc3BvbnNlLWNvbnRlbnQtZGlzcG9zaXRpb249YXR0YWNobWVudCUzQitmaWxlbmFtZSUzRCUyMnNjYW4tdHJhY2tpbmctYXNpbi5odG1sJTIyJTNCK2ZpbGVuYW1lJTJBJTNEVVRGLTglMjclMjdzY2FuLXRyYWNraW5nLWFzaW4uaHRtbCoiLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjE3ODUxMDcyMDJ9fX1dfQ__&Signature=AS0juB~UqSMqbcYK6AUjMA7FgSOck0dEC3SdBw7oFoY5rccuIK6KmieAuENPt1fa70TJhpsks1MBo2W~HgR2qA~lcBlwt-I9UAIyBnqH5bbPEk0hmYjQT1etJl8KIptavm4r2DrcN~BzHONHQLuBZsETdFKRL10hFUilidBSO2PKNWODd4xU52-2j~~Uozrfg8DycxIruseqlIZXQDCByy5qtpRFy78MeN8ZR-aGkjAnJ9D0zcP4esqNF76LPJefbvsVcmE2NV~jPkxyeQTA1fiPIrQleXbQWoxBBeyeMQ~ZLV38VfwxRyH2VIEqXkTr8V3kVOmDRJePGpIJ2J-KvQ__&Key-Pair-Id=K1BF7XGXAIMYNX&rnd=1784502729074&utm_source=perplexity -->
+<html lang="fr"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scanner Suivi → ASIN</title>
+<script src="./Dernier Fonctionnel_files/xlsx.full.min.js.télécharger"></script>
+<script src="./Dernier Fonctionnel_files/html5-qrcode.min.js.télécharger"></script>
+<script src="./Dernier Fonctionnel_files/JsBarcode.all.min.js.télécharger"></script>
+<script src="./Dernier Fonctionnel_files/jspdf.umd.min.js.télécharger"></script>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; background:#f7f7f8; color:#111; padding:0 12px; }
+  h1 { font-size: 22px; }
+  .card { background:#fff; border:1px solid #ddd; border-radius:8px; padding:20px; margin-bottom:20px; box-shadow:0 1px 3px rgba(0,0,0,0.08); }
+  input[type=file] { margin-bottom: 10px; }
+  #scanInput {
+    width: 100%; font-size: 22px; padding: 14px; border: 2px solid #ff9900;
+    border-radius: 8px; box-sizing: border-box;
+  }
+  #status { margin-top: 8px; font-size: 14px; color: #555; }
+  table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; font-size: 14px; }
+  th { background: #ff9900; color: #fff; }
+  tr:nth-child(even) { background: #fafafa; }
+  .empty { color: #888; font-style: italic; }
+  .found { color: #2e7d32; font-weight: bold; }
+  .notfound { color: #c62828; font-weight: bold; }
+  #count { font-size: 13px; color:#555; margin-top:6px; }
+  .barcode-btn {
+    background:#111; color:#fff; border:none; border-radius:4px;
+    padding:5px 10px; font-size:12px; cursor:pointer;
+  }
+  .barcode-cell canvas { display:none; }
+  .btn {
+    background:#ff9900; color:#fff; border:none; border-radius:6px;
+    padding:10px 16px; font-size:15px; cursor:pointer; margin-right:8px; margin-bottom:10px;
+  }
+  .btn.stop { background:#c62828; }
+  #cameraWrap { display:none; margin-top:12px; }
+  #reader { width:100%; max-width:500px; border-radius:8px; overflow:hidden; }
+  .tab-toggle { display:flex; gap:8px; margin-bottom:14px; }
+  .tab-btn { flex:1; padding:10px; border:1px solid #ff9900; background:#fff; color:#ff9900; border-radius:6px; cursor:pointer; font-weight:bold; }
+  .tab-btn.active { background:#ff9900; color:#fff; }
+  #manualZone { display:block; }
+</style>
+</head>
+<body>
+
+<h1>📦 Scanner un colis → obtenir les ASIN</h1>
+
+<div class="card">
+  <strong>1. Chargez votre export Amazon (Order History) :</strong><br>
+  <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+  <div id="status">Aucun fichier chargé.</div>
+</div>
+
+<div class="card">
+  <strong>2. Chargez un 2e fichier Excel de correspondance :</strong><br>
+  <div style="font-size:13px;color:#555;margin:6px 0 10px;">La colonne A doit contenir l'ASIN, la colonne B le code-barres à utiliser dans le PDF.</div>
+  <input type="file" id="fileInput2" accept=".xlsx,.xls,.csv">
+  <div id="status2">Aucun 2e fichier chargé.</div>
+</div>
+
+<div class="card">
+  <strong>🏷️ Générer un code-barres directement à partir d'un ASIN</strong>
+  <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+    <input type="text" id="directAsinInput" placeholder="Coller un ASIN (ex: B0FK5B3T...)" style="flex:1; min-width:200px; padding:10px; font-size:15px; border:1px solid #ccc; border-radius:6px;">
+    <button class="btn" id="genDirectBarcode">🏷️ Générer</button>
+  </div>
+  <div id="directBarcodeResult" style="margin-top:12px;"></div>
+</div>
+
+<div class="card">
+  <div class="tab-toggle">
+    <button class="tab-btn active" id="tabManual">⌨️ Douchette / saisie</button>
+    <button class="tab-btn" id="tabCamera">📷 Caméra</button>
+  </div>
+
+  <div id="manualZone">
+    <input type="text" id="scanInput" placeholder="Scanner ou coller le numéro de suivi..." autofocus="">
+  </div>
+
+  <div id="cameraZone" style="display:none;">
+    <button class="btn" id="startCam">▶️ Démarrer la caméra</button>
+    <button class="btn stop" id="stopCam" style="display:none;">⏹ Arrêter</button>
+    <div id="cameraWrap">
+      <div id="reader"></div>
+    </div>
+    <div id="camStatus" style="font-size:13px;color:#555;margin-top:6px;"></div>
+  </div>
+
+  <label style="display:flex; align-items:center; gap:6px; margin-top:8px; font-size:13px; color:#333;">
+    <input type="checkbox" id="autoDownload">
+    Télécharger automatiquement le PDF dès qu'un colis est trouvé
+  </label>
+  <div id="count"></div>
+  <div id="result"></div>
+</div>
+
+<script>
+let rows = [];
+let secondRows = [];
+
+function normalize(s) {
+  return String(s || "").toUpperCase().replace(/[\s\-_.]/g, "").trim();
+}
+
+function detectColumns(headers) {
+  const norm = headers.map(h => String(h || "").toLowerCase());
+  let tCol = norm.findIndex(h => h.includes("tracking") || h.includes("suivi") || h.includes("carrier"));
+  let aCol = norm.findIndex(h => h === "asin" || h.includes("asin"));
+  let pCol = norm.findIndex(h => h.includes("product name") || h.includes("nom du produit") || h === "product name");
+  return { tCol, aCol, pCol };
+}
+
+function handleFile(file) {
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const data = new Uint8Array(e.target.result);
+    const workbook = XLSX.read(data, { type: "array" });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const json = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+
+    if (json.length < 2) {
+      document.getElementById("status").textContent = "Fichier vide ou illisible.";
+      return;
+    }
+
+    const headers = json[0];
+    const { tCol, aCol, pCol } = detectColumns(headers);
+
+    if (tCol === -1 || aCol === -1) {
+      document.getElementById("status").textContent =
+        "⚠️ Colonnes ASIN ou Tracking non détectées automatiquement. Vérifiez les en-têtes du fichier.";
+      return;
+    }
+
+    rows = json.slice(1).map(r => ({
+      trackingNorm: normalize(r[tCol]),
+      trackingRaw: r[tCol],
+      asin: r[aCol],
+      productName: pCol !== -1 ? r[pCol] : "",
+    })).filter(r => r.trackingRaw);
+
+    const pColLabel = pCol !== -1 ? `, colonne Produit: "<strong>${headers[pCol]}</strong>"` : ' — ⚠️ colonne "Product Name" non trouvée';
+    document.getElementById("status").innerHTML =
+      `✅ ${rows.length} lignes chargées. Colonne suivi: "<strong>${headers[tCol]}</strong>", colonne ASIN: "<strong>${headers[aCol]}</strong>"${pColLabel}.`;
+    document.getElementById("scanInput").value = "";
+    document.getElementById("scanInput").focus();
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+document.getElementById("fileInput").addEventListener("change", function(e) {
+  if (e.target.files.length > 0) handleFile(e.target.files[0]);
+});
+
+document.getElementById("fileInput2").addEventListener("change", function(e) {
+  if (e.target.files.length > 0) handleSecondFile(e.target.files[0]);
+});
+
+function handleSecondFile(file) {
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const data = new Uint8Array(e.target.result);
+    const workbook = XLSX.read(data, { type: "array" });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const json = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+
+    if (json.length < 1) {
+      document.getElementById("status2").textContent = "2e fichier vide ou illisible.";
+      return;
+    }
+
+    secondRows = json.slice(1).map(r => {
+      const asinRaw = String(r[0] || "");
+      const tokens = (asinRaw.toUpperCase().match(/[A-Z0-9]{8,20}/g) || []).map(t => normalize(t));
+      return {
+        asinNorm: normalize(r[0]),
+        asinRaw,
+        asinTokens: tokens,
+        barcodeValue: String(r[1] || "").trim()
+      };
+    }).filter(r => r.asinRaw && r.barcodeValue);
+
+    document.getElementById("status2").innerHTML = `✅ ${secondRows.length} lignes chargées dans le 2e fichier. Colonne A = texte contenant l'ASIN, colonne B = code-barres.`;
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+
+function findSecondMatchByAsin(asin) {
+  const asinNorm = normalize(asin);
+  if (!asinNorm) return null;
+
+  const extractAsinLikeTokens = (text) => {
+    const raw = String(text || '').toUpperCase();
+    const tokens = raw.match(/[A-Z0-9]{10}/g) || [];
+    return tokens.map(t => normalize(t));
+  };
+
+  const exact = secondRows.find(x => x.asinNorm === asinNorm);
+  if (exact) return exact;
+
+  const tokenizedExact = secondRows.find(x => extractAsinLikeTokens(x.asinRaw).includes(asinNorm));
+  if (tokenizedExact) return tokenizedExact;
+
+  const contains = secondRows.find(x => x.asinNorm.includes(asinNorm));
+  if (contains) return contains;
+
+  return null;
+}
+
+function search(value) {
+  const resultDiv = document.getElementById("result");
+  const countDiv = document.getElementById("count");
+  if (!value) {
+    resultDiv.innerHTML = "";
+    countDiv.textContent = "";
+    return;
+  }
+  if (rows.length === 0) {
+    resultDiv.innerHTML = '<div class="empty">Chargez d\'abord un fichier ci-dessus.</div>';
+    return;
+  }
+
+  const target = normalize(value);
+  const matches = rows.filter(r => r.trackingNorm === target || r.trackingNorm.includes(target) || target.includes(r.trackingNorm)).map(r => {
+    const second = findSecondMatchByAsin(r.asin);
+    return {
+      ...r,
+      pdfBarcodeValue: second && second.barcodeValue ? second.barcodeValue : r.asin,
+      matchedSecondAsinRaw: second ? second.asinRaw : '',
+      usedFallbackAsin: !(second && second.barcodeValue)
+    };
+  });
+
+  if (matches.length === 0) {
+    resultDiv.innerHTML = '<div class="notfound">❌ Aucun ASIN trouvé pour ce numéro de suivi.</div>';
+    countDiv.textContent = "";
+    return;
+  }
+
+  countDiv.innerHTML = `<span class="found">✅ ${matches.length} article(s) trouvé(s) pour ce colis (scan: ${value})</span>`;
+
+  let html = '<div style="margin-bottom:10px;"><button class="btn" id="downloadPdfBtn">📄 Télécharger le PDF (' + matches.length + ' code(s)-barres)</button></div>';
+  html += '<table><tr><th>ASIN</th><th>Nom du produit</th><th>N° de suivi</th><th>Valeur encodée dans le PDF</th><th>Source fichier 2</th></tr>';
+  matches.forEach((m) => {
+    html += `<tr>
+      <td><strong>${m.asin}</strong></td>
+      <td>${m.productName || '<em>Non disponible</em>'}</td>
+      <td>${m.trackingRaw}</td>
+      <td><strong>${m.pdfBarcodeValue}</strong></td>
+      <td>${m.usedFallbackAsin ? '<span style="color:#c62828;">Aucune correspondance, fallback ASIN</span>' : (m.matchedSecondAsinRaw || '<em>Match trouvé</em>')}</td>
+    </tr>`;
+  });
+  html += '</table>';
+  resultDiv.innerHTML = html;
+
+  document.getElementById("downloadPdfBtn").addEventListener("click", () => downloadBarcodesPdf(matches, value));
+
+  const autoDl = document.getElementById("autoDownload");
+  if (autoDl && autoDl.checked) {
+    downloadBarcodesPdf(matches, value);
+  }
+}
+
+let debounceTimer;
+document.getElementById("scanInput").addEventListener("input", function(e) {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => search(e.target.value), 150);
+});
+document.getElementById("scanInput").addEventListener("keydown", function(e) {
+  if (e.key === "Enter") search(e.target.value);
+});
+
+// Onglets Manuel / Caméra
+const tabManual = document.getElementById("tabManual");
+const tabCamera = document.getElementById("tabCamera");
+const manualZone = document.getElementById("manualZone");
+const cameraZone = document.getElementById("cameraZone");
+
+tabManual.addEventListener("click", () => {
+  tabManual.classList.add("active");
+  tabCamera.classList.remove("active");
+  manualZone.style.display = "block";
+  cameraZone.style.display = "none";
+  stopScanner();
+});
+tabCamera.addEventListener("click", () => {
+  tabCamera.classList.add("active");
+  tabManual.classList.remove("active");
+  cameraZone.style.display = "block";
+  manualZone.style.display = "none";
+});
+
+// Scanner caméra (html5-qrcode) — supporte codes-barres 1D (Code128, EAN) et QR.
+let html5QrCode = null;
+let lastScanValue = "";
+let lastScanTime = 0;
+
+document.getElementById("startCam").addEventListener("click", async () => {
+  const camStatus = document.getElementById("camStatus");
+  document.getElementById("cameraWrap").style.display = "block";
+  document.getElementById("startCam").style.display = "none";
+  document.getElementById("stopCam").style.display = "inline-block";
+  camStatus.textContent = "Initialisation de la caméra...";
+
+  html5QrCode = new Html5Qrcode("reader");
+  const config = {
+    fps: 10,
+    qrbox: { width: 280, height: 160 },
+    formatsToSupport: [
+      Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.CODE_39,
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.QR_CODE,
+      Html5QrcodeSupportedFormats.ITF,
+      Html5QrcodeSupportedFormats.UPC_A,
+    ]
+  };
+
+  try {
+    await html5QrCode.start(
+      { facingMode: "environment" },
+      config,
+      (decodedText) => {
+        const now = Date.now();
+        if (decodedText === lastScanValue && now - lastScanTime < 2000) return;
+        lastScanValue = decodedText;
+        lastScanTime = now;
+        camStatus.innerHTML = `📷 Code détecté: <strong>${decodedText}</strong>`;
+        search(decodedText);
+        if (navigator.vibrate) navigator.vibrate(150);
+      },
+      () => { /* ignore frames without a code */ }
+    );
+    camStatus.textContent = "Caméra active — visez le code-barres du colis.";
+  } catch (err) {
+    camStatus.textContent = "❌ Impossible d'accéder à la caméra : " + err;
+  }
+});
+
+document.getElementById("stopCam").addEventListener("click", stopScanner);
+
+document.getElementById("genDirectBarcode").addEventListener("click", () => {
+  const asin = document.getElementById("directAsinInput").value.trim();
+  const resultDiv = document.getElementById("directBarcodeResult");
+  if (!asin) { resultDiv.innerHTML = '<div class="notfound">Entrez un ASIN.</div>'; return; }
+
+  let title = "";
+  const match = rows.find(r => String(r.asin).toUpperCase() === asin.toUpperCase());
+  if (match) title = match.productName || "";
+
+  const second = findSecondMatchByAsin(asin);
+  const barcodeValue = second && second.barcodeValue ? second.barcodeValue : asin;
+  const canvas = generateBarcodeWithLabel(barcodeValue, title, asin);
+  resultDiv.innerHTML = "";
+  canvas.style.border = "1px solid #ddd";
+  canvas.style.borderRadius = "6px";
+  resultDiv.appendChild(canvas);
+
+  const dlBtn = document.createElement('button');
+  dlBtn.className = 'barcode-btn';
+  dlBtn.style.marginTop = '10px';
+  dlBtn.style.display = 'block';
+  dlBtn.textContent = '⬇️ Télécharger cette étiquette';
+  dlBtn.onclick = () => {
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `barcode_${asin}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+  };
+  resultDiv.appendChild(dlBtn);
+
+  if (!title) {
+    const note = document.createElement('div');
+    note.style.fontSize = '12px';
+    note.style.color = '#888';
+    note.style.marginTop = '6px';
+    note.textContent = "ℹ️ Titre non trouvé dans le fichier chargé pour cet ASIN (chargez le fichier pour l'inclure automatiquement).";
+    resultDiv.appendChild(note);
+  }
+});
+
+function generateBarcodeWithLabel(barcodeValue, title, displayAsin = "") {
+  const barcodeCanvas = document.createElement('canvas');
+  JsBarcode(barcodeCanvas, String(barcodeValue || ""), {
+    format: "CODE128",
+    displayValue: false,
+    margin: 10,
+    height: 60,
+    width: 2,
+  });
+
+  const padding = 12;
+  const titleFontSize = 14;
+  const asinFontSize = 16;
+  const metaFontSize = 11;
+  const maxWidth = Math.max(barcodeCanvas.width, 320);
+
+  const finalCanvas = document.createElement('canvas');
+  const ctx = finalCanvas.getContext('2d');
+  ctx.font = `bold ${titleFontSize}px Arial`;
+
+  function wrapText(text, maxW) {
+    const words = String(text || "").split(' ');
+    const lines = [];
+    let line = '';
+    words.forEach(word => {
+      const test = line ? line + ' ' + word : word;
+      if (ctx.measureText(test).width > maxW && line) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = test;
+      }
+    });
+    if (line) lines.push(line);
+    return lines;
+  }
+
+  const titleLines = wrapText(title, maxWidth - padding * 2);
+  const titleHeight = titleLines.length * (titleFontSize + 4);
+
+  finalCanvas.width = maxWidth + padding * 2;
+  finalCanvas.height = barcodeCanvas.height + asinFontSize + metaFontSize + titleHeight + padding * 5;
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
+
+  let y = padding;
+  const bx = (finalCanvas.width - barcodeCanvas.width) / 2;
+  ctx.drawImage(barcodeCanvas, bx, y);
+  y += barcodeCanvas.height + 6;
+
+  ctx.fillStyle = '#000000';
+  ctx.font = `bold ${asinFontSize}px Arial`;
+  ctx.textAlign = 'center';
+  ctx.fillText(displayAsin || String(barcodeValue || ''), finalCanvas.width / 2, y + asinFontSize);
+  y += asinFontSize + 6;
+
+  ctx.font = `${metaFontSize}px Arial`;
+  ctx.fillStyle = '#666666';
+  ctx.fillText(String(barcodeValue || ''), finalCanvas.width / 2, y + metaFontSize);
+  y += metaFontSize + 8;
+
+  ctx.fillStyle = '#000000';
+  ctx.font = `${titleFontSize}px Arial`;
+  titleLines.forEach(line => {
+    ctx.fillText(line, finalCanvas.width / 2, y + titleFontSize);
+    y += titleFontSize + 4;
+  });
+
+  return finalCanvas;
+}
+
+function downloadBarcode(canvasId, asin, title) {
+  const second = findSecondMatchByAsin(asin);
+  const encodedValue = String((second && second.barcodeValue) ? second.barcodeValue : asin).trim();
+  const finalCanvas = generateBarcodeWithLabel(encodedValue, title, asin);
+  finalCanvas.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `barcode_${asin}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+}
+
+function downloadBarcodesPdf(matches, trackingValue) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const marginTop = 15;
+  const marginSide = 15;
+  const labelWidthMm = pageWidth - marginSide * 2;
+  let y = marginTop;
+
+  doc.setFontSize(14);
+  doc.text(`Colis - N° de suivi: ${trackingValue}`, marginSide, 10);
+
+  matches.forEach((m, idx) => {
+    const encodedValue = String(m.pdfBarcodeValue || m.asin || '').trim();
+    const canvas = generateBarcodeWithLabel(encodedValue, m.productName || "", m.asin);
+    const imgData = canvas.toDataURL("image/png");
+    const ratio = canvas.height / canvas.width;
+    const imgWidthMm = labelWidthMm;
+    const imgHeightMm = imgWidthMm * ratio;
+
+    if (y + imgHeightMm > pageHeight - marginTop) {
+      doc.addPage();
+      y = marginTop;
+    }
+
+    doc.addImage(imgData, "PNG", marginSide, y, imgWidthMm, imgHeightMm);
+    y += imgHeightMm + 10;
+  });
+
+  doc.save(`colis_${trackingValue}_codes-barres.pdf`);
+}
+
+function stopScanner() {
+  if (html5QrCode) {
+    html5QrCode.stop().then(() => {
+      html5QrCode.clear();
+      html5QrCode = null;
+    }).catch(() => {});
+  }
+  document.getElementById("startCam").style.display = "inline-block";
+  document.getElementById("stopCam").style.display = "none";
+  document.getElementById("cameraWrap").style.display = "none";
+  document.getElementById("camStatus").textContent = "";
+}
+</script>
+
+
+
+</body></html>
