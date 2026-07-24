@@ -1,49 +1,48 @@
 <!DOCTYPE html>
-<html lang="fr">
-<head>
-  <meta charset="UTF-8">
-  <title>Scanner Suivi → ASIN</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- adapte les chemins si besoin -->
-  <script src="xlsx.full.min.js"></script>
-  <script src="html5-qrcode.min.js"></script>
-  <script src="JsBarcode.all.min.js"></script>
-  <script src="jspdf.umd.min.js"></script>
-  <style>
-    body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; background:#f7f7f8; color:#111; padding:0 12px; }
-    h1 { font-size: 22px; }
-    .card { background:#fff; border:1px solid #ddd; border-radius:8px; padding:20px; margin-bottom:20px; box-shadow:0 1px 3px rgba(0,0,0,0.08); }
-    input[type=file] { margin-bottom: 10px; }
-    #scanInput {
-      width: 100%; font-size: 22px; padding: 14px; border: 2px solid #ff9900;
-      border-radius: 8px; box-sizing: border-box;
-    }
-    #status { margin-top: 8px; font-size: 14px; color: #555; }
-    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-    th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; font-size: 14px; }
-    th { background: #ff9900; color: #fff; }
-    tr:nth-child(even) { background: #fafafa; }
-    .empty { color: #888; font-style: italic; }
-    .found { color: #2e7d32; font-weight: bold; }
-    .notfound { color: #c62828; font-weight: bold; }
-    #count { font-size: 13px; color:#555; margin-top:6px; }
-    .barcode-btn {
-      background:#111; color:#fff; border:none; border-radius:4px;
-      padding:5px 10px; font-size:12px; cursor:pointer;
-    }
-    .barcode-cell canvas { display:none; }
-    .btn {
-      background:#ff9900; color:#fff; border:none; border-radius:6px;
-      padding:10px 16px; font-size:15px; cursor:pointer; margin-right:8px; margin-bottom:10px;
-    }
-    .btn.stop { background:#c62828; }
-    #cameraWrap { display:none; margin-top:12px; }
-    #reader { width:100%; max-width:500px; border-radius:8px; overflow:hidden; }
-    .tab-toggle { display:flex; gap:8px; margin-bottom:14px; }
-    .tab-btn { flex:1; padding:10px; border:1px solid #ff9900; background:#fff; color:#ff9900; border-radius:6px; cursor:pointer; font-weight:bold; }
-    .tab-btn.active { background:#ff9900; color:#fff; }
-    #manualZone { display:block; }
-  </style>
+<!-- saved from url=(1192)https://d2z0o16i8xm8ak.cloudfront.net/web/direct-files/75bfff85d8ddfa1f46e51bb5423d3298/76f2d6c9-d034-453c-8424-c541c3a301d5/54eee7a3.html?response-content-disposition=attachment%3B+filename%3D%22scan-tracking-asin.html%22%3B+filename%2A%3DUTF-8%27%27scan-tracking-asin.html&Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9kMnowbzE2aTh4bThhay5jbG91ZGZyb250Lm5ldC93ZWIvZGlyZWN0LWZpbGVzLzc1YmZmZjg1ZDhkZGZhMWY0NmU1MWJiNTQyM2QzMjk4Lzc2ZjJkNmM5LWQwMzQtNDUzYy04NDI0LWM1NDFjM2EzMDFkNS81NGVlZTdhMy5odG1sP3Jlc3BvbnNlLWNvbnRlbnQtZGlzcG9zaXRpb249YXR0YWNobWVudCUzQitmaWxlbmFtZSUzRCUyMnNjYW4tdHJhY2tpbmctYXNpbi5odG1sJTIyJTNCK2ZpbGVuYW1lJTJBJTNEVVRGLTglMjclMjdzY2FuLXRyYWNraW5nLWFzaW4uaHRtbCoiLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjE3ODUxMDcyMDJ9fX1dfQ__&Signature=AS0juB~UqSMqbcYK6AUjMA7FgSOck0dEC3SdBw7oFoY5rccuIK6KmieAuENPt1fa70TJhpsks1MBo2W~HgR2qA~lcBlwt-I9UAIyBnqH5bbPEk0hmYjQT1etJl8KIptavm4r2DrcN~BzHONHQLuBZsETdFKRL10hFUilidBSO2PKNWODd4xU52-2j~~Uozrfg8DycxIruseqlIZXQDCByy5qtpRFy78MeN8ZR-aGkjAnJ9D0zcP4esqNF76LPJefbvsVcmE2NV~jPkxyeQTA1fiPIrQleXbQWoxBBeyeMQ~ZLV38VfwxRyH2VIEqXkTr8V3kVOmDRJePGpIJ2J-KvQ__&Key-Pair-Id=K1BF7XGXAIMYNX&rnd=1784502729074&utm_source=perplexity -->
+<html lang="fr"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scanner Suivi → ASIN</title>
+<script src="./Dernier Fonctionnel_files/xlsx.full.min.js.télécharger"></script>
+<script src="./Dernier Fonctionnel_files/html5-qrcode.min.js.télécharger"></script>
+<script src="./Dernier Fonctionnel_files/JsBarcode.all.min.js.télécharger"></script>
+<script src="./Dernier Fonctionnel_files/jspdf.umd.min.js.télécharger"></script>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; background:#f7f7f8; color:#111; padding:0 12px; }
+  h1 { font-size: 22px; }
+  .card { background:#fff; border:1px solid #ddd; border-radius:8px; padding:20px; margin-bottom:20px; box-shadow:0 1px 3px rgba(0,0,0,0.08); }
+  input[type=file] { margin-bottom: 10px; }
+  #scanInput {
+    width: 100%; font-size: 22px; padding: 14px; border: 2px solid #ff9900;
+    border-radius: 8px; box-sizing: border-box;
+  }
+  #status { margin-top: 8px; font-size: 14px; color: #555; }
+  table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; font-size: 14px; }
+  th { background: #ff9900; color: #fff; }
+  tr:nth-child(even) { background: #fafafa; }
+  .empty { color: #888; font-style: italic; }
+  .found { color: #2e7d32; font-weight: bold; }
+  .notfound { color: #c62828; font-weight: bold; }
+  #count { font-size: 13px; color:#555; margin-top:6px; }
+  .barcode-btn {
+    background:#111; color:#fff; border:none; border-radius:4px;
+    padding:5px 10px; font-size:12px; cursor:pointer;
+  }
+  .barcode-cell canvas { display:none; }
+  .btn {
+    background:#ff9900; color:#fff; border:none; border-radius:6px;
+    padding:10px 16px; font-size:15px; cursor:pointer; margin-right:8px; margin-bottom:10px;
+  }
+  .btn.stop { background:#c62828; }
+  #cameraWrap { display:none; margin-top:12px; }
+  #reader { width:100%; max-width:500px; border-radius:8px; overflow:hidden; }
+  .tab-toggle { display:flex; gap:8px; margin-bottom:14px; }
+  .tab-btn { flex:1; padding:10px; border:1px solid #ff9900; background:#fff; color:#ff9900; border-radius:6px; cursor:pointer; font-weight:bold; }
+  .tab-btn.active { background:#ff9900; color:#fff; }
+  #manualZone { display:block; }
+</style>
 </head>
 <body>
 
@@ -78,11 +77,12 @@
   </div>
 
   <div id="manualZone">
-    <input type="text" id="scanInput" placeholder="Scanner ou coller le numéro de suivi..." autofocus>
+    <input type="text" id="scanInput" placeholder="Scanner ou coller le numéro de suivi..." autofocus="">
   </div>
 
   <div id="cameraZone" style="display:none;">
     <button class="btn" id="startCam">▶️ Démarrer la caméra</button>
+    <button class="btn" id="toggleFlash" style="display:none; background:#555;">🔦 Allumer le flash</button>
     <button class="btn stop" id="stopCam" style="display:none;">⏹ Arrêter</button>
     <div id="cameraWrap">
       <div id="reader"></div>
@@ -191,6 +191,7 @@ function handleSecondFile(file) {
   reader.readAsArrayBuffer(file);
 }
 
+
 function findSecondMatchByAsin(asin) {
   const asinNorm = normalize(asin);
   if (!asinNorm) return null;
@@ -276,7 +277,7 @@ document.getElementById("scanInput").addEventListener("keydown", function(e) {
   if (e.key === "Enter") search(e.target.value);
 });
 
-// Onglets Manuel / Caméra (version d'origine)
+// Onglets Manuel / Caméra
 const tabManual = document.getElementById("tabManual");
 const tabCamera = document.getElementById("tabCamera");
 const manualZone = document.getElementById("manualZone");
@@ -296,9 +297,11 @@ tabCamera.addEventListener("click", () => {
   manualZone.style.display = "none";
 });
 
+// Scanner caméra (html5-qrcode) — supporte codes-barres 1D (Code128, EAN) et QR.
 let html5QrCode = null;
 let lastScanValue = "";
 let lastScanTime = 0;
+let flashEnabled = false;
 
 document.getElementById("startCam").addEventListener("click", async () => {
   const camStatus = document.getElementById("camStatus");
@@ -335,11 +338,49 @@ document.getElementById("startCam").addEventListener("click", async () => {
         search(decodedText);
         if (navigator.vibrate) navigator.vibrate(150);
       },
-      () => {}
+      () => { /* ignore frames without a code */ }
     );
     camStatus.textContent = "Caméra active — visez le code-barres du colis.";
+
+    // Affiche le bouton du flash uniquement si la caméra arrière prend en charge la torche.
+    const flashBtn = document.getElementById("toggleFlash");
+    try {
+      const capabilities = html5QrCode.getRunningTrackCapabilities();
+      if (capabilities && capabilities.torch) {
+        flashBtn.style.display = "inline-block";
+      } else {
+        flashBtn.style.display = "none";
+      }
+    } catch (_) {
+      flashBtn.style.display = "none";
+    }
   } catch (err) {
     camStatus.textContent = "❌ Impossible d'accéder à la caméra : " + err;
+  }
+});
+
+document.getElementById("toggleFlash").addEventListener("click", async () => {
+  const flashBtn = document.getElementById("toggleFlash");
+  const camStatus = document.getElementById("camStatus");
+  if (!html5QrCode) return;
+
+  try {
+    const capabilities = html5QrCode.getRunningTrackCapabilities();
+    if (!capabilities || !capabilities.torch) {
+      flashBtn.style.display = "none";
+      camStatus.textContent = "⚠️ Le flash n'est pas pris en charge par cette caméra.";
+      return;
+    }
+
+    flashEnabled = !flashEnabled;
+    await html5QrCode.applyVideoConstraints({
+      advanced: [{ torch: flashEnabled }]
+    });
+    flashBtn.textContent = flashEnabled ? "🔦 Éteindre le flash" : "🔦 Allumer le flash";
+  } catch (err) {
+    flashEnabled = false;
+    flashBtn.textContent = "🔦 Allumer le flash";
+    camStatus.textContent = "⚠️ Impossible de modifier le flash sur cet appareil.";
   }
 });
 
@@ -389,9 +430,8 @@ document.getElementById("genDirectBarcode").addEventListener("click", () => {
     note.textContent = "ℹ️ Titre non trouvé dans le fichier chargé pour cet ASIN (chargez le fichier pour l'inclure automatiquement).";
     resultDiv.appendChild(note);
   }
-}
+});
 
-// chiffres plus gros / gras
 function generateBarcodeWithLabel(barcodeValue, title, displayAsin = "") {
   const barcodeCanvas = document.createElement('canvas');
   JsBarcode(barcodeCanvas, String(barcodeValue || ""), {
@@ -404,8 +444,8 @@ function generateBarcodeWithLabel(barcodeValue, title, displayAsin = "") {
 
   const padding = 12;
   const titleFontSize = 14;
-  const asinFontSize = 18;
-  const metaFontSize = 14;
+  const asinFontSize = 16;
+  const metaFontSize = 18;
   const maxWidth = Math.max(barcodeCanvas.width, 320);
 
   const finalCanvas = document.createElement('canvas');
@@ -480,43 +520,47 @@ function downloadBarcode(canvasId, asin, title) {
   });
 }
 
-// 1 étiquette par page + image un peu réduite
 function downloadBarcodesPdf(matches, trackingValue) {
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
+
+  // Format compact 100 × 70 mm : une seule étiquette par page.
+  const doc = new jsPDF({
+    orientation: "landscape",
+    unit: "mm",
+    format: [100, 70],
+    compress: true
+  });
+
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-
-  const marginSide = 15;
-  const topMargin = 18;
-  const maxLabelWidthMm = Math.min(pageWidth - marginSide * 2, 90);
-  const maxLabelHeightMm = pageHeight - topMargin - 25;
+  const marginSide = 5;
+  const headerY = 6;
+  const imageTop = 10;
+  const maxImageWidth = pageWidth - marginSide * 2;
+  const maxImageHeight = pageHeight - imageTop - 4;
 
   matches.forEach((m, idx) => {
-    if (idx > 0) {
-      doc.addPage();
-    }
+    if (idx > 0) doc.addPage([100, 70], "landscape");
 
-    doc.setFontSize(14);
-    doc.text(`Colis - N° de suivi: ${trackingValue}`, marginSide, 10);
+    doc.setFontSize(8);
+    doc.text(`Colis - N° de suivi: ${trackingValue}`, marginSide, headerY);
 
     const encodedValue = String(m.pdfBarcodeValue || m.asin || '').trim();
     const canvas = generateBarcodeWithLabel(encodedValue, m.productName || "", m.asin);
     const imgData = canvas.toDataURL("image/png");
 
     const ratio = canvas.height / canvas.width;
-    let imgWidthMm = maxLabelWidthMm;
+    let imgWidthMm = maxImageWidth;
     let imgHeightMm = imgWidthMm * ratio;
 
-    if (imgHeightMm > maxLabelHeightMm) {
-      imgHeightMm = maxLabelHeightMm;
+    if (imgHeightMm > maxImageHeight) {
+      imgHeightMm = maxImageHeight;
       imgWidthMm = imgHeightMm / ratio;
     }
 
     const x = (pageWidth - imgWidthMm) / 2;
-    const y = topMargin + 5;
-
-    doc.addImage(imgData, "PNG", x, y, imgWidthMm, imgHeightMm);
+    const y = imageTop + (maxImageHeight - imgHeightMm) / 2;
+    doc.addImage(imgData, "PNG", x, y, imgWidthMm, imgHeightMm, undefined, "FAST");
   });
 
   doc.save(`colis_${trackingValue}_codes-barres.pdf`);
@@ -529,12 +573,17 @@ function stopScanner() {
       html5QrCode = null;
     }).catch(() => {});
   }
-  document.getElementById("startCam")..style.display = "inline-block";
+  flashEnabled = false;
+  const flashBtn = document.getElementById("toggleFlash");
+  flashBtn.style.display = "none";
+  flashBtn.textContent = "🔦 Allumer le flash";
+  document.getElementById("startCam").style.display = "inline-block";
   document.getElementById("stopCam").style.display = "none";
   document.getElementById("cameraWrap").style.display = "none";
   document.getElementById("camStatus").textContent = "";
 }
 </script>
 
-</body>
-</html>
+
+
+</body></html>
