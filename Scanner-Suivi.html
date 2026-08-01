@@ -55,6 +55,15 @@
 </div>
 
 <div class="card">
+  <strong>🔎 Rechercher dans le titre du produit du fichier Excel fusionné</strong>
+  <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+    <input type="text" id="productTitleSearch" placeholder="Ex. imprimante, chargeur, Samsung..." style="flex:1; min-width:200px; padding:10px; font-size:15px; border:1px solid #ccc; border-radius:6px;">
+    <button class="btn" id="clearProductSearch" style="background:#555;">Effacer</button>
+  </div>
+  <div id="productSearchResult" style="margin-top:12px;"></div>
+</div>
+
+<div class="card">
   <strong>2. Chargez un 2e fichier Excel de correspondance :</strong><br>
   <div style="font-size:13px;color:#555;margin:6px 0 10px;">La colonne A doit contenir l'ASIN, la colonne B le code-barres à utiliser dans le PDF.</div>
   <input type="file" id="fileInput2" accept=".xlsx,.xls,.csv">
@@ -102,6 +111,62 @@
 let rows = [];
 let secondRows = [];
 
+// Mémorisation locale des deux fichiers Excel (IndexedDB).
+const FILE_DB_NAME = "scanner-asin-files";
+const FILE_DB_VERSION = 1;
+const FILE_STORE_NAME = "files";
+
+function openFileDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(FILE_DB_NAME, FILE_DB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(FILE_STORE_NAME)) {
+        db.createObjectStore(FILE_STORE_NAME);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function saveFileLocally(key, file, arrayBuffer) {
+  try {
+    const db = await openFileDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(FILE_STORE_NAME, "readwrite");
+      tx.objectStore(FILE_STORE_NAME).put({
+        name: file.name || "fichier.xlsx",
+        type: file.type || "application/octet-stream",
+        lastModified: file.lastModified || Date.now(),
+        data: arrayBuffer
+      }, key);
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  } catch (err) {
+    console.warn("Impossible de mémoriser le fichier :", err);
+  }
+}
+
+async function getSavedFile(key) {
+  try {
+    const db = await openFileDb();
+    const record = await new Promise((resolve, reject) => {
+      const tx = db.transaction(FILE_STORE_NAME, "readonly");
+      const req = tx.objectStore(FILE_STORE_NAME).get(key);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    return record;
+  } catch (err) {
+    console.warn("Impossible de restaurer le fichier :", err);
+    return null;
+  }
+}
+
 function normalize(s) {
   return String(s || "").toUpperCase().replace(/[\s\-_.]/g, "").trim();
 }
@@ -110,47 +175,63 @@ function detectColumns(headers) {
   const norm = headers.map(h => String(h || "").toLowerCase());
   let tCol = norm.findIndex(h => h.includes("tracking") || h.includes("suivi") || h.includes("carrier"));
   let aCol = norm.findIndex(h => h === "asin" || h.includes("asin"));
-  let pCol = norm.findIndex(h => h.includes("product name") || h.includes("nom du produit") || h === "product name");
+  let pCol = norm.findIndex(h =>
+    h.includes("product name") ||
+    h.includes("nom du produit") ||
+    h.includes("product title") ||
+    h.includes("titre du produit") ||
+    h === "title" ||
+    h === "titre"
+  );
   return { tCol, aCol, pCol };
 }
 
-function handleFile(file) {
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    const data = new Uint8Array(e.target.result);
-    const workbook = XLSX.read(data, { type: "array" });
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-    const json = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+function processPrimaryFileData(arrayBuffer, fileName = "", restored = false) {
+  const data = new Uint8Array(arrayBuffer);
+  const workbook = XLSX.read(data, { type: "array" });
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  const json = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
 
-    if (json.length < 2) {
-      document.getElementById("status").textContent = "Fichier vide ou illisible.";
-      return;
-    }
+  if (json.length < 2) {
+    document.getElementById("status").textContent = "Fichier vide ou illisible.";
+    return;
+  }
 
-    const headers = json[0];
-    const { tCol, aCol, pCol } = detectColumns(headers);
+  const headers = json[0];
+  const { tCol, aCol, pCol } = detectColumns(headers);
 
-    if (tCol === -1 || aCol === -1) {
-      document.getElementById("status").textContent =
-        "⚠️ Colonnes ASIN ou Tracking non détectées automatiquement. Vérifiez les en-têtes du fichier.";
-      return;
-    }
+  if (tCol === -1 || aCol === -1) {
+    document.getElementById("status").textContent =
+      "⚠️ Colonnes ASIN ou Tracking non détectées automatiquement. Vérifiez les en-têtes du fichier.";
+    return;
+  }
 
-    rows = json.slice(1).map(r => ({
-      trackingNorm: normalize(r[tCol]),
-      trackingRaw: r[tCol],
-      asin: r[aCol],
-      productName: pCol !== -1 ? r[pCol] : "",
-    })).filter(r => r.trackingRaw);
+  rows = json.slice(1).map(r => ({
+    trackingNorm: normalize(r[tCol]),
+    trackingRaw: r[tCol],
+    asin: r[aCol],
+    productName: pCol !== -1 ? r[pCol] : "",
+  })).filter(r => r.trackingRaw);
 
-    const pColLabel = pCol !== -1 ? `, colonne Produit: "<strong>${headers[pCol]}</strong>"` : ' — ⚠️ colonne "Product Name" non trouvée';
-    document.getElementById("status").innerHTML =
-      `✅ ${rows.length} lignes chargées. Colonne suivi: "<strong>${headers[tCol]}</strong>", colonne ASIN: "<strong>${headers[aCol]}</strong>"${pColLabel}.`;
-    document.getElementById("scanInput").value = "";
+  const pColLabel = pCol !== -1 ? `, colonne Produit: "<strong>${headers[pCol]}</strong>"` : ' — ⚠️ colonne "Product Name" non trouvée';
+  const restoredText = restored ? " — 💾 restauré automatiquement" : "";
+  const fileText = fileName ? ` <span style="color:#555;">(${escapeHtml(fileName)})</span>` : "";
+  document.getElementById("status").innerHTML =
+    `✅ ${rows.length} lignes chargées${fileText}. Colonne suivi: "<strong>${headers[tCol]}</strong>", colonne ASIN: "<strong>${headers[aCol]}</strong>"${pColLabel}.${restoredText}`;
+  document.getElementById("scanInput").value = "";
+  searchByProductTitle(document.getElementById("productTitleSearch").value);
+}
+
+async function handleFile(file, shouldSave = true) {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    processPrimaryFileData(arrayBuffer, file.name, false);
+    if (shouldSave) await saveFileLocally("orderHistory", file, arrayBuffer);
     document.getElementById("scanInput").focus();
-  };
-  reader.readAsArrayBuffer(file);
+  } catch (err) {
+    document.getElementById("status").textContent = "❌ Impossible de lire le fichier : " + err;
+  }
 }
 
 document.getElementById("fileInput").addEventListener("change", function(e) {
@@ -161,34 +242,152 @@ document.getElementById("fileInput2").addEventListener("change", function(e) {
   if (e.target.files.length > 0) handleSecondFile(e.target.files[0]);
 });
 
-function handleSecondFile(file) {
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    const data = new Uint8Array(e.target.result);
-    const workbook = XLSX.read(data, { type: "array" });
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-    const json = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+function normalizeSearchText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
 
-    if (json.length < 1) {
-      document.getElementById("status2").textContent = "2e fichier vide ou illisible.";
-      return;
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function searchByProductTitle(value) {
+  const resultDiv = document.getElementById("productSearchResult");
+  const query = normalizeSearchText(value);
+
+  if (!query) {
+    resultDiv.innerHTML = "";
+    return;
+  }
+
+  if (rows.length === 0) {
+    resultDiv.innerHTML = '<div class="empty">Chargez d\'abord le fichier Excel fusionné.</div>';
+    return;
+  }
+
+  const terms = query.split(/\s+/).filter(Boolean);
+  const matches = rows.filter(row => {
+    const title = normalizeSearchText(row.productName);
+    return title && terms.every(term => title.includes(term));
+  });
+
+  if (matches.length === 0) {
+    resultDiv.innerHTML = '<div class="notfound">❌ Aucun titre de produit correspondant.</div>';
+    return;
+  }
+
+  const visibleMatches = matches.slice(0, 100);
+  let html = `<div class="found">✅ ${matches.length} résultat(s) trouvé(s) dans le titre du produit`;
+  if (matches.length > visibleMatches.length) html += ` — affichage des ${visibleMatches.length} premiers`;
+  html += `</div>`;
+  html += '<table><tr><th>ASIN</th><th>Titre du produit</th><th>N° de suivi</th><th>Action</th></tr>';
+
+  visibleMatches.forEach((row, index) => {
+    html += `<tr>
+      <td><strong>${escapeHtml(row.asin)}</strong></td>
+      <td>${escapeHtml(row.productName) || '<em>Non disponible</em>'}</td>
+      <td>${escapeHtml(row.trackingRaw)}</td>
+      <td><button class="barcode-btn product-search-generate" data-index="${index}">🏷️ Générer</button></td>
+    </tr>`;
+  });
+  html += '</table>';
+  resultDiv.innerHTML = html;
+
+  resultDiv.querySelectorAll(".product-search-generate").forEach(button => {
+    button.addEventListener("click", () => {
+      const row = visibleMatches[Number(button.dataset.index)];
+      if (!row) return;
+      document.getElementById("directAsinInput").value = row.asin;
+      document.getElementById("genDirectBarcode").click();
+      document.getElementById("directBarcodeResult").scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  });
+}
+
+let productSearchTimer;
+document.getElementById("productTitleSearch").addEventListener("input", function(e) {
+  clearTimeout(productSearchTimer);
+  productSearchTimer = setTimeout(() => searchByProductTitle(e.target.value), 150);
+});
+
+document.getElementById("productTitleSearch").addEventListener("keydown", function(e) {
+  if (e.key === "Enter") searchByProductTitle(e.target.value);
+});
+
+document.getElementById("clearProductSearch").addEventListener("click", function() {
+  document.getElementById("productTitleSearch").value = "";
+  document.getElementById("productSearchResult").innerHTML = "";
+  document.getElementById("productTitleSearch").focus();
+});
+
+function processSecondFileData(arrayBuffer, fileName = "", restored = false) {
+  const data = new Uint8Array(arrayBuffer);
+  const workbook = XLSX.read(data, { type: "array" });
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  const json = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+
+  if (json.length < 1) {
+    document.getElementById("status2").textContent = "2e fichier vide ou illisible.";
+    return;
+  }
+
+  secondRows = json.slice(1).map(r => {
+    const asinRaw = String(r[0] || "");
+    const tokens = (asinRaw.toUpperCase().match(/[A-Z0-9]{8,20}/g) || []).map(t => normalize(t));
+    return {
+      asinNorm: normalize(r[0]),
+      asinRaw,
+      asinTokens: tokens,
+      barcodeValue: String(r[1] || "").trim()
+    };
+  }).filter(r => r.asinRaw && r.barcodeValue);
+
+  const restoredText = restored ? " — 💾 restauré automatiquement" : "";
+  const fileText = fileName ? ` <span style="color:#555;">(${escapeHtml(fileName)})</span>` : "";
+  document.getElementById("status2").innerHTML = `✅ ${secondRows.length} lignes chargées${fileText} dans le 2e fichier. Colonne A = texte contenant l'ASIN, colonne B = code-barres.${restoredText}`;
+}
+
+async function handleSecondFile(file, shouldSave = true) {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    processSecondFileData(arrayBuffer, file.name, false);
+    if (shouldSave) await saveFileLocally("correspondence", file, arrayBuffer);
+  } catch (err) {
+    document.getElementById("status2").textContent = "❌ Impossible de lire le 2e fichier : " + err;
+  }
+}
+
+
+async function restoreSavedFiles() {
+  const [primary, secondary] = await Promise.all([
+    getSavedFile("orderHistory"),
+    getSavedFile("correspondence")
+  ]);
+
+  if (primary && primary.data) {
+    try {
+      processPrimaryFileData(primary.data, primary.name || "fichier mémorisé", true);
+    } catch (err) {
+      document.getElementById("status").textContent = "⚠️ Fichier mémorisé trouvé mais impossible à restaurer.";
     }
+  }
 
-    secondRows = json.slice(1).map(r => {
-      const asinRaw = String(r[0] || "");
-      const tokens = (asinRaw.toUpperCase().match(/[A-Z0-9]{8,20}/g) || []).map(t => normalize(t));
-      return {
-        asinNorm: normalize(r[0]),
-        asinRaw,
-        asinTokens: tokens,
-        barcodeValue: String(r[1] || "").trim()
-      };
-    }).filter(r => r.asinRaw && r.barcodeValue);
-
-    document.getElementById("status2").innerHTML = `✅ ${secondRows.length} lignes chargées dans le 2e fichier. Colonne A = texte contenant l'ASIN, colonne B = code-barres.`;
-  };
-  reader.readAsArrayBuffer(file);
+  if (secondary && secondary.data) {
+    try {
+      processSecondFileData(secondary.data, secondary.name || "2e fichier mémorisé", true);
+    } catch (err) {
+      document.getElementById("status2").textContent = "⚠️ 2e fichier mémorisé trouvé mais impossible à restaurer.";
+    }
+  }
 }
 
 
@@ -533,38 +732,56 @@ function downloadBarcodesPdf(matches, trackingValue) {
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const marginSide = 5;
-  const headerY = 6;
-  const imageTop = 10;
-  const maxImageWidth = pageWidth - marginSide * 2;
-  const maxImageHeight = pageHeight - imageTop - 4;
+  const sideMargin = 1.5; // Marge minimale d'impression : le code-barres occupe presque toute la largeur.
+  const barcodeWidth = pageWidth - sideMargin * 2;
+  const barcodeTop = 9;
+  const barcodeHeight = 27;
 
   matches.forEach((m, idx) => {
     if (idx > 0) doc.addPage([100, 70], "landscape");
 
     doc.setFontSize(8);
-    doc.text(`Colis - N° de suivi: ${trackingValue}`, marginSide, headerY);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Colis - N° de suivi: ${trackingValue}`, sideMargin, 5.5);
 
     const encodedValue = String(m.pdfBarcodeValue || m.asin || '').trim();
-    const canvas = generateBarcodeWithLabel(encodedValue, m.productName || "", m.asin);
-    const imgData = canvas.toDataURL("image/png");
 
-    const ratio = canvas.height / canvas.width;
-    let imgWidthMm = maxImageWidth;
-    let imgHeightMm = imgWidthMm * ratio;
+    // Génère uniquement les barres, puis les étire sur presque toute la largeur du PDF.
+    const barcodeOnly = document.createElement('canvas');
+    JsBarcode(barcodeOnly, encodedValue, {
+      format: "CODE128",
+      displayValue: false,
+      margin: 8,
+      height: 90,
+      width: 3
+    });
+    const barcodeImg = barcodeOnly.toDataURL("image/png");
+    doc.addImage(barcodeImg, "PNG", sideMargin, barcodeTop, barcodeWidth, barcodeHeight, undefined, "FAST");
 
-    if (imgHeightMm > maxImageHeight) {
-      imgHeightMm = maxImageHeight;
-      imgWidthMm = imgHeightMm / ratio;
+    let y = barcodeTop + barcodeHeight + 6;
+
+    doc.setTextColor(0, 0, 0);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.text(String(m.asin || encodedValue), pageWidth / 2, y, { align: "center" });
+
+    y += 6;
+    doc.setFontSize(15);
+    doc.text(encodedValue, pageWidth / 2, y, { align: "center" });
+
+    y += 5;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    const title = String(m.productName || "").trim();
+    if (title) {
+      const titleLines = doc.splitTextToSize(title, pageWidth - 6);
+      doc.text(titleLines.slice(0, 3), pageWidth / 2, y, { align: "center", maxWidth: pageWidth - 6 });
     }
-
-    const x = (pageWidth - imgWidthMm) / 2;
-    const y = imageTop + (maxImageHeight - imgHeightMm) / 2;
-    doc.addImage(imgData, "PNG", x, y, imgWidthMm, imgHeightMm, undefined, "FAST");
   });
 
   doc.save(`colis_${trackingValue}_codes-barres.pdf`);
 }
+
 
 function stopScanner() {
   if (html5QrCode) {
@@ -581,6 +798,22 @@ function stopScanner() {
   document.getElementById("stopCam").style.display = "none";
   document.getElementById("cameraWrap").style.display = "none";
   document.getElementById("camStatus").textContent = "";
+}
+
+
+// Restaure automatiquement les deux fichiers Excel mémorisés après une actualisation.
+window.addEventListener("DOMContentLoaded", () => {
+  restoreSavedFiles();
+});
+
+// Mode hors ligne pour GitHub Pages / serveur HTTPS : le service worker met en cache
+// cette page et toutes les bibliothèques locales après la première ouverture en ligne.
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(err => {
+      console.warn("Service worker non disponible :", err);
+    });
+  });
 }
 </script>
 
