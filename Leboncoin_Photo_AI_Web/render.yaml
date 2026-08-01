@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: leboncoin-photo-ai
+    runtime: python
+    buildCommand: python -m py_compile app.py
+    startCommand: python app.py
+    healthCheckPath: /healthz
+    envVars:
+      - key: APP_USERNAME
+        value: admin
+      - key: APP_PASSWORD
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-5.6-luna
+      - key: FORCE_SECURE_COOKIE
+        value: "1"
