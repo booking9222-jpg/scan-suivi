@@ -1,0 +1,1332 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scanner Suivi → ASIN → Phomemo M110</title>
+<script src="./Dernier Fonctionnel_files/xlsx.full.min.js.télécharger"></script>
+<script src="./Dernier Fonctionnel_files/html5-qrcode.min.js.télécharger"></script>
+<script src="./Dernier Fonctionnel_files/JsBarcode.all.min.js.télécharger"></script>
+<script src="./Dernier Fonctionnel_files/jspdf.umd.min.js.télécharger"></script>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; background:#f7f7f8; color:#111; padding:0 12px; }
+  h1 { font-size: 22px; }
+  .card { background:#fff; border:1px solid #ddd; border-radius:8px; padding:20px; margin-bottom:20px; box-shadow:0 1px 3px rgba(0,0,0,0.08); }
+  input[type=file] { margin-bottom: 10px; }
+  #scanInput {
+    width: 100%; font-size: 22px; padding: 14px; border: 2px solid #ff9900;
+    border-radius: 8px; box-sizing: border-box;
+  }
+  #status { margin-top: 8px; font-size: 14px; color: #555; }
+  table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; font-size: 14px; }
+  th { background: #ff9900; color: #fff; }
+  tr:nth-child(even) { background: #fafafa; }
+  .empty { color: #888; font-style: italic; }
+  .found { color: #2e7d32; font-weight: bold; }
+  .notfound { color: #c62828; font-weight: bold; }
+  #count { font-size: 13px; color:#555; margin-top:6px; }
+  .barcode-btn {
+    background:#111; color:#fff; border:none; border-radius:4px;
+    padding:5px 10px; font-size:12px; cursor:pointer;
+  }
+  .barcode-cell canvas { display:none; }
+  .btn {
+    background:#ff9900; color:#fff; border:none; border-radius:6px;
+    padding:10px 16px; font-size:15px; cursor:pointer; margin-right:8px; margin-bottom:10px;
+  }
+  .btn.stop { background:#c62828; }
+  #cameraWrap { display:none; margin-top:12px; }
+  #reader { width:100%; max-width:500px; border-radius:8px; overflow:hidden; }
+  .tab-toggle { display:flex; gap:8px; margin-bottom:14px; }
+  .tab-btn { flex:1; padding:10px; border:1px solid #ff9900; background:#fff; color:#ff9900; border-radius:6px; cursor:pointer; font-weight:bold; }
+  .tab-btn.active { background:#ff9900; color:#fff; }
+  #manualZone { display:block; }
+
+  .printer-card { border:2px solid #1565c0; }
+  .printer-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px; }
+  .printer-btn { background:#1565c0; }
+  .printer-btn.secondary { background:#555; }
+  .printer-btn.disconnect { background:#c62828; }
+  .printer-status { margin-top:8px; font-size:14px; font-weight:bold; }
+  .printer-status.ok { color:#2e7d32; }
+  .printer-status.err { color:#c62828; }
+  .printer-status.wait { color:#ef6c00; }
+  .mini-note { font-size:12px; color:#666; line-height:1.4; margin-top:7px; }
+  .size-box { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px; }
+  .size-box select, .size-box input { padding:9px; border:1px solid #bbb; border-radius:6px; font-size:14px; background:#fff; }
+  .size-box input { width:78px; }
+  .print-progress { height:8px; background:#eee; border-radius:6px; overflow:hidden; margin-top:8px; display:none; }
+  .print-progress > div { height:100%; width:0%; background:#1565c0; transition:width .1s linear; }
+  .m110-print-btn { background:#1565c0; font-weight:bold; }
+  .m110-print-one { background:#1565c0; }
+  .label-size-badge { display:inline-block; background:#e3f2fd; color:#0d47a1; border-radius:999px; padding:4px 9px; font-size:12px; font-weight:bold; }
+</style>
+</head>
+<body>
+
+<h1>📦 Scanner un colis → obtenir les ASIN → 🖨️ M110</h1>
+
+<div class="card printer-card" id="m110Card">
+  <strong>🖨️ Phomemo M110 — impression Bluetooth directe</strong>
+  <div class="printer-row">
+    <button class="btn printer-btn" id="connectM110">🔵 Connecter la M110</button>
+    <button class="btn printer-btn secondary" id="connectM110All">🔎 Connexion avancée</button>
+    <button class="btn printer-btn disconnect" id="disconnectM110" style="display:none;">Déconnecter</button>
+  </div>
+  <div id="m110Status" class="printer-status wait">M110 non connectée.</div>
+  <div class="print-progress" id="m110Progress"><div id="m110ProgressBar"></div></div>
+
+  <div style="margin-top:14px;"><strong>📐 Taille de l'étiquette</strong></div>
+  <div class="size-box">
+    <select id="labelSizePreset">
+      <option value="40x30" selected>40 × 30 mm</option>
+      <option value="50x30">50 × 30 mm</option>
+      <option value="custom">Autre taille…</option>
+    </select>
+    <div id="customSizeWrap" style="display:none; align-items:center; gap:6px; flex-wrap:wrap;">
+      <label>Largeur <input type="number" id="customLabelWidth" min="20" max="50" step="1" value="40"> mm</label>
+      <label>Hauteur <input type="number" id="customLabelHeight" min="10" max="100" step="1" value="30"> mm</label>
+    </div>
+    <span id="activeLabelSize" class="label-size-badge">40 × 30 mm</span>
+  </div>
+  <div class="mini-note">La M110 accepte des étiquettes jusqu'à 50 mm de large. Sa tête imprime environ 48 mm au maximum : sur une étiquette de 50 mm, le contenu est centré avec une petite marge latérale.</div>
+
+  <div class="printer-row">
+    <label style="font-size:13px;">Densité :
+      <select id="m110Density" style="padding:7px; border:1px solid #bbb; border-radius:6px;">
+        <option value="4">4 — clair</option>
+        <option value="5">5</option>
+        <option value="6" selected>6 — normal</option>
+        <option value="7">7</option>
+        <option value="8">8 — foncé</option>
+      </select>
+    </label>
+    <button class="btn printer-btn secondary" id="testM110">🧪 Imprimer une étiquette test</button>
+  </div>
+  <div class="mini-note"><strong>Pas d'impression automatique :</strong> après le scan, un bouton « Imprimer sur M110 » apparaît. Tu déclenches toi-même l'impression.</div>
+</div>
+
+
+<div class="card">
+  <strong>1. Chargez votre export Amazon (Order History) :</strong><br>
+  <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+  <div id="status">Aucun fichier chargé.</div>
+</div>
+
+<div class="card">
+  <strong>🔎 Rechercher dans le titre du produit du fichier Excel fusionné</strong>
+  <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+    <input type="text" id="productTitleSearch" placeholder="Ex. imprimante, chargeur, Samsung..." style="flex:1; min-width:200px; padding:10px; font-size:15px; border:1px solid #ccc; border-radius:6px;">
+    <button class="btn" id="clearProductSearch" style="background:#555;">Effacer</button>
+  </div>
+  <div id="productSearchResult" style="margin-top:12px;"></div>
+</div>
+
+<div class="card">
+  <strong>2. Chargez un 2e fichier Excel de correspondance :</strong><br>
+  <div style="font-size:13px;color:#555;margin:6px 0 10px;">La colonne A doit contenir l'ASIN, la colonne B le code-barres à utiliser dans le PDF.</div>
+  <input type="file" id="fileInput2" accept=".xlsx,.xls,.csv">
+  <div id="status2">Aucun 2e fichier chargé.</div>
+</div>
+
+<div class="card">
+  <strong>🏷️ Générer un code-barres directement à partir d'un ASIN</strong>
+  <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+    <input type="text" id="directAsinInput" placeholder="Coller un ASIN (ex: B0FK5B3T...)" style="flex:1; min-width:200px; padding:10px; font-size:15px; border:1px solid #ccc; border-radius:6px;">
+    <button class="btn" id="genDirectBarcode">🏷️ Générer</button>
+  </div>
+  <div id="directBarcodeResult" style="margin-top:12px;"></div>
+</div>
+
+<div class="card">
+  <div class="tab-toggle">
+    <button class="tab-btn active" id="tabManual">⌨️ Douchette / saisie</button>
+    <button class="tab-btn" id="tabCamera">📷 Caméra</button>
+  </div>
+
+  <div id="manualZone">
+    <input type="text" id="scanInput" placeholder="Scanner ou coller le numéro de suivi..." autofocus="">
+  </div>
+
+  <div id="cameraZone" style="display:none;">
+    <button class="btn" id="startCam">▶️ Démarrer la caméra</button>
+    <button class="btn" id="toggleFlash" style="display:none; background:#555;">🔦 Allumer le flash</button>
+    <button class="btn stop" id="stopCam" style="display:none;">⏹ Arrêter</button>
+    <div id="cameraWrap">
+      <div id="reader"></div>
+    </div>
+    <div id="camStatus" style="font-size:13px;color:#555;margin-top:6px;"></div>
+  </div>
+
+  <label style="display:flex; align-items:center; gap:6px; margin-top:8px; font-size:13px; color:#333;">
+    <input type="checkbox" id="autoDownload">
+    Télécharger automatiquement le PDF dès qu'un colis est trouvé
+  </label>
+  <div id="count"></div>
+  <div id="result"></div>
+</div>
+
+<script>
+
+// =============================================================
+// PHOMEMO M110 — Web Bluetooth + protocole M110
+// Préparé pour une utilisation manuelle : le scan trouve le colis,
+// l'impression ne part que lorsqu'on appuie sur le bouton Imprimer.
+// =============================================================
+const M110_BLE = {
+  services: [
+    0xff00,
+    0xffe0,
+    0xae30,
+    '0000ff00-0000-1000-8000-00805f9b34fb',
+    '0000ffe0-0000-1000-8000-00805f9b34fb',
+    '49535343-fe7d-4ae5-8fa9-9fafd205e455'
+  ],
+  preferredWriteCharacteristic: 0xff02,
+  chunkSize: 128,
+  chunkDelay: 20
+};
+
+const M110_DPI = 203;
+const M110_MAX_PRINTABLE_MM = 48;
+const M110_HEAD_DOTS = 384;
+const M110_HEAD_BYTES = 48;
+
+let m110Device = null;
+let m110Server = null;
+let m110Service = null;
+let m110WriteChar = null;
+let m110UseWriteWithResponse = false;
+let m110PrintQueue = Promise.resolve();
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+function setM110Status(text, type = 'wait') {
+  const el = document.getElementById('m110Status');
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'printer-status ' + type;
+}
+
+function setM110Progress(percent, visible = true) {
+  const wrap = document.getElementById('m110Progress');
+  const bar = document.getElementById('m110ProgressBar');
+  if (!wrap || !bar) return;
+  wrap.style.display = visible ? 'block' : 'none';
+  bar.style.width = Math.max(0, Math.min(100, percent)) + '%';
+}
+
+function isM110Connected() {
+  return !!(m110Device && m110Device.gatt && m110Device.gatt.connected && m110WriteChar);
+}
+
+function updateM110Buttons() {
+  const connected = isM110Connected();
+  const b1 = document.getElementById('connectM110');
+  const b2 = document.getElementById('connectM110All');
+  const bd = document.getElementById('disconnectM110');
+  if (b1) b1.style.display = connected ? 'none' : 'inline-block';
+  if (b2) b2.style.display = connected ? 'none' : 'inline-block';
+  if (bd) bd.style.display = connected ? 'inline-block' : 'none';
+}
+
+async function connectM110(showAll = false) {
+  if (!('bluetooth' in navigator)) {
+    setM110Status('❌ Web Bluetooth indisponible. Utilisez Chrome/Edge Android avec la page en HTTPS.', 'err');
+    return false;
+  }
+
+  try {
+    setM110Status('Recherche de la M110…', 'wait');
+    const requestOptions = showAll ? {
+      acceptAllDevices: true,
+      optionalServices: M110_BLE.services
+    } : {
+      filters: [
+        { namePrefix: 'M110' },
+        { namePrefix: 'M120' },
+        { namePrefix: 'Phomemo' }
+      ],
+      optionalServices: M110_BLE.services
+    };
+
+    m110Device = await navigator.bluetooth.requestDevice(requestOptions);
+    if (!m110Device) throw new Error('Aucune imprimante sélectionnée.');
+
+    m110Device.addEventListener('gattserverdisconnected', () => {
+      m110Server = null;
+      m110Service = null;
+      m110WriteChar = null;
+      setM110Status('⚠️ M110 déconnectée. Appuyez sur Connecter pour reprendre.', 'err');
+      setM110Progress(0, false);
+      updateM110Buttons();
+    });
+
+    setM110Status(`Connexion à ${m110Device.name || 'M110'}…`, 'wait');
+    m110Server = await m110Device.gatt.connect();
+    await sleep(150);
+
+    let lastError = null;
+    for (const serviceUuid of M110_BLE.services) {
+      try {
+        const service = await m110Server.getPrimaryService(serviceUuid);
+        let writeChar = null;
+        try {
+          writeChar = await service.getCharacteristic(M110_BLE.preferredWriteCharacteristic);
+        } catch (_) {
+          const chars = await service.getCharacteristics();
+          writeChar = chars.find(c => c.properties.writeWithoutResponse || c.properties.write) || null;
+        }
+        if (writeChar) {
+          m110Service = service;
+          m110WriteChar = writeChar;
+          m110UseWriteWithResponse = !writeChar.properties.writeWithoutResponse && !!writeChar.properties.write;
+          break;
+        }
+      } catch (err) {
+        lastError = err;
+      }
+    }
+
+    if (!m110WriteChar) {
+      throw new Error('Service Bluetooth compatible introuvable' + (lastError ? ` (${lastError.message})` : ''));
+    }
+
+    setM110Status(`✅ ${m110Device.name || 'M110'} connectée — prête à imprimer`, 'ok');
+    updateM110Buttons();
+    return true;
+  } catch (err) {
+    console.error('M110 connect error:', err);
+    setM110Status('❌ Connexion M110 impossible : ' + (err.message || err), 'err');
+    updateM110Buttons();
+    return false;
+  }
+}
+
+function disconnectM110() {
+  try {
+    if (m110Device?.gatt?.connected) m110Device.gatt.disconnect();
+  } catch (_) {}
+  m110Server = null;
+  m110Service = null;
+  m110WriteChar = null;
+  setM110Status('M110 non connectée.', 'wait');
+  setM110Progress(0, false);
+  updateM110Buttons();
+}
+
+async function m110Send(bytes) {
+  if (!isM110Connected()) throw new Error('M110 non connectée');
+  const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  if (m110UseWriteWithResponse) {
+    await m110WriteChar.writeValue(data);
+  } else {
+    try {
+      await m110WriteChar.writeValueWithoutResponse(data);
+    } catch (_) {
+      m110UseWriteWithResponse = true;
+      await m110WriteChar.writeValue(data);
+    }
+  }
+}
+
+function mmToDots(mm) {
+  return Math.max(1, Math.round(Number(mm) * M110_DPI / 25.4));
+}
+
+function getSelectedLabelSize() {
+  const preset = document.getElementById('labelSizePreset')?.value || '40x30';
+  let width = 40, height = 30;
+  if (preset === '50x30') {
+    width = 50; height = 30;
+  } else if (preset === 'custom') {
+    width = Number(document.getElementById('customLabelWidth')?.value || 40);
+    height = Number(document.getElementById('customLabelHeight')?.value || 30);
+  }
+  width = Math.max(20, Math.min(50, width));
+  height = Math.max(10, Math.min(100, height));
+  return { width, height, printableWidth: Math.min(width, M110_MAX_PRINTABLE_MM) };
+}
+
+function updateLabelSizeUi() {
+  const preset = document.getElementById('labelSizePreset')?.value || '40x30';
+  const custom = document.getElementById('customSizeWrap');
+  if (custom) custom.style.display = preset === 'custom' ? 'flex' : 'none';
+  const size = getSelectedLabelSize();
+  const badge = document.getElementById('activeLabelSize');
+  if (badge) badge.textContent = `${size.width} × ${size.height} mm`;
+  const printBtn = document.getElementById('printM110Btn');
+  if (printBtn && printBtn.dataset.count) {
+    printBtn.textContent = `🖨️ Imprimer sur M110 (${printBtn.dataset.count} étiquette(s)) — ${size.width}×${size.height} mm`;
+  }
+  try {
+    localStorage.setItem('m110LabelSizePreset', preset);
+    localStorage.setItem('m110CustomWidth', String(size.width));
+    localStorage.setItem('m110CustomHeight', String(size.height));
+  } catch (_) {}
+}
+
+function restoreLabelSizeUi() {
+  try {
+    const preset = localStorage.getItem('m110LabelSizePreset');
+    if (preset && ['40x30','50x30','custom'].includes(preset)) document.getElementById('labelSizePreset').value = preset;
+    const w = localStorage.getItem('m110CustomWidth');
+    const h = localStorage.getItem('m110CustomHeight');
+    if (w) document.getElementById('customLabelWidth').value = w;
+    if (h) document.getElementById('customLabelHeight').value = h;
+  } catch (_) {}
+  updateLabelSizeUi();
+}
+
+function m110CanvasToRaster(labelCanvas) {
+  const outputWidthBytes = M110_HEAD_BYTES;
+  const ctx = labelCanvas.getContext('2d', { willReadFrequently: true });
+  const image = ctx.getImageData(0, 0, labelCanvas.width, labelCanvas.height);
+  const srcWidthBytes = Math.ceil(labelCanvas.width / 8);
+  const xOffsetBytes = Math.max(0, Math.floor((outputWidthBytes - srcWidthBytes) / 2));
+  const out = new Uint8Array(outputWidthBytes * labelCanvas.height);
+
+  for (let y = 0; y < labelCanvas.height; y++) {
+    for (let x = 0; x < labelCanvas.width; x++) {
+      const p = (y * labelCanvas.width + x) * 4;
+      const brightness = 0.299 * image.data[p] + 0.587 * image.data[p + 1] + 0.114 * image.data[p + 2];
+      if (brightness < 128) {
+        const byteX = Math.floor(x / 8) + xOffsetBytes;
+        if (byteX >= 0 && byteX < outputWidthBytes) {
+          out[y * outputWidthBytes + byteX] |= (1 << (7 - (x % 8)));
+        }
+      }
+    }
+  }
+  return { data: out, widthBytes: outputWidthBytes, heightLines: labelCanvas.height };
+}
+
+async function printRasterM110(raster, density = 6, onProgress = null) {
+  if (!isM110Connected()) throw new Error('M110 non connectée');
+  const densityValue = Math.round(5 + Math.max(1, Math.min(8, density)) * 1.25);
+
+  // Vitesse, densité, papier avec espace (GAP), raster, fin d'étiquette.
+  await m110Send([0x1b, 0x4e, 0x0d, 0x05]);
+  await sleep(30);
+  await m110Send([0x1b, 0x4e, 0x04, densityValue]);
+  await sleep(30);
+  await m110Send([0x1f, 0x11, 0x0a]);
+  await sleep(30);
+
+  const h = raster.heightLines;
+  await m110Send(new Uint8Array([
+    0x1d, 0x76, 0x30, 0x00,
+    raster.widthBytes & 0xff, (raster.widthBytes >> 8) & 0xff,
+    h & 0xff, (h >> 8) & 0xff
+  ]));
+
+  const total = raster.data.length;
+  for (let i = 0; i < total; i += M110_BLE.chunkSize) {
+    const chunk = raster.data.slice(i, Math.min(i + M110_BLE.chunkSize, total));
+    await m110Send(chunk);
+    await sleep(M110_BLE.chunkDelay);
+    if (onProgress) onProgress(Math.round((i + chunk.length) / total * 100));
+  }
+
+  await sleep(250);
+  await m110Send([0x1f, 0xf0, 0x05, 0x00, 0x1f, 0xf0, 0x03, 0x00]);
+  await sleep(450);
+}
+
+function truncateTextToWidth(ctx, text, maxWidth) {
+  let str = String(text || '');
+  if (ctx.measureText(str).width <= maxWidth) return str;
+  while (str.length > 1 && ctx.measureText(str + '…').width > maxWidth) str = str.slice(0, -1);
+  return str + '…';
+}
+
+function wrapM110Text(ctx, text, maxWidth, maxLines = 3) {
+  const words = String(text || '').trim().split(/\s+/).filter(Boolean);
+  const lines = [];
+  let line = '';
+  for (const word of words) {
+    const test = line ? `${line} ${word}` : word;
+    if (ctx.measureText(test).width <= maxWidth) {
+      line = test;
+    } else {
+      if (line) lines.push(line);
+      line = word;
+      if (lines.length >= maxLines - 1) break;
+    }
+  }
+  if (line && lines.length < maxLines) lines.push(line);
+  if (lines.length === maxLines) lines[maxLines - 1] = truncateTextToWidth(ctx, lines[maxLines - 1], maxWidth);
+  return lines;
+}
+
+function generateM110LabelCanvas(match, trackingValue) {
+  const size = getSelectedLabelSize();
+  const W = Math.min(M110_HEAD_DOTS, mmToDots(size.printableWidth));
+  const H = mmToDots(size.height);
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#000';
+  ctx.textAlign = 'center';
+  ctx.imageSmoothingEnabled = false;
+
+  const compact = H < 200;
+  const side = Math.max(6, Math.round(W * 0.025));
+  const trackingFont = Math.max(9, Math.min(12, Math.round(H * 0.048)));
+  const asinFont = Math.max(13, Math.min(20, Math.round(H * 0.075)));
+  const codeFont = Math.max(14, Math.min(22, Math.round(H * 0.085)));
+  const titleFont = Math.max(9, Math.min(14, Math.round(H * 0.052)));
+
+  let y = Math.max(11, Math.round(H * 0.055));
+  ctx.font = `${trackingFont}px Arial`;
+  ctx.fillText(truncateTextToWidth(ctx, `Colis: ${trackingValue || ''}`, W - side * 2), W / 2, y);
+
+  const bc = document.createElement('canvas');
+  const barcodeValue = String(match.pdfBarcodeValue || match.asin || '');
+  const barcodeModule = W >= 300 ? 2 : 1;
+  JsBarcode(bc, barcodeValue, {
+    format: 'CODE128',
+    displayValue: false,
+    margin: 2,
+    height: Math.max(48, Math.round(H * (compact ? 0.31 : 0.35))),
+    width: barcodeModule
+  });
+
+  const barcodeTop = y + Math.max(5, Math.round(H * 0.02));
+  const maxBw = W - side * 2;
+  const maxBh = Math.max(45, Math.round(H * (compact ? 0.31 : 0.36)));
+  let dw = bc.width;
+  let dh = bc.height;
+  if (dw > maxBw || dh > maxBh) {
+    const scale = Math.min(maxBw / dw, maxBh / dh);
+    dw = Math.max(1, Math.floor(dw * scale));
+    dh = Math.max(1, Math.floor(dh * scale));
+  }
+  ctx.drawImage(bc, Math.round((W - dw) / 2), barcodeTop, dw, dh);
+
+  y = barcodeTop + dh + Math.max(12, Math.round(H * 0.055));
+  ctx.fillStyle = '#000';
+  ctx.font = `bold ${asinFont}px Arial`;
+  ctx.fillText(truncateTextToWidth(ctx, String(match.asin || ''), W - side * 2), W / 2, y);
+
+  y += codeFont + Math.max(2, Math.round(H * 0.01));
+  ctx.font = `bold ${codeFont}px Arial`;
+  ctx.fillText(truncateTextToWidth(ctx, barcodeValue, W - side * 2), W / 2, y);
+
+  y += titleFont + Math.max(5, Math.round(H * 0.025));
+  ctx.font = `${titleFont}px Arial`;
+  const remaining = Math.max(0, H - y - 4);
+  const lineStep = titleFont + 3;
+  const maxLines = Math.max(1, Math.min(3, Math.floor(remaining / lineStep)));
+  const lines = wrapM110Text(ctx, match.productName || '', W - side * 2, maxLines);
+  for (const line of lines) {
+    if (y > H - 2) break;
+    ctx.fillText(line, W / 2, y);
+    y += lineStep;
+  }
+
+  return c;
+}
+
+async function printOneM110(match, trackingValue) {
+  const canvas = generateM110LabelCanvas(match, trackingValue);
+  const raster = m110CanvasToRaster(canvas);
+  const density = Number(document.getElementById('m110Density')?.value || 6);
+  setM110Progress(0, true);
+  await printRasterM110(raster, density, p => setM110Progress(p, true));
+  setM110Progress(100, true);
+  setTimeout(() => setM110Progress(0, false), 800);
+}
+
+async function manualPrintM110(matches, trackingValue) {
+  // IMPORTANT : requestDevice() est appelé directement depuis le clic utilisateur,
+  // afin que Chrome Android autorise l'ouverture du sélecteur Bluetooth.
+  if (!isM110Connected()) {
+    const connected = await connectM110(false);
+    if (!connected) return;
+  }
+  return queueM110Print(matches, trackingValue);
+}
+
+function queueM110Print(matches, trackingValue) {
+  const copy = Array.isArray(matches) ? matches.slice() : [];
+  if (!copy.length) return Promise.resolve();
+  if (!isM110Connected()) {
+    setM110Status('⚠️ M110 non connectée. Appuyez de nouveau sur Imprimer pour vous connecter.', 'err');
+    return Promise.resolve();
+  }
+
+  m110PrintQueue = m110PrintQueue.then(async () => {
+    try {
+      const size = getSelectedLabelSize();
+      setM110Status(`🖨️ Impression de ${copy.length} étiquette(s) en ${size.width}×${size.height} mm…`, 'wait');
+      for (let i = 0; i < copy.length; i++) {
+        setM110Status(`🖨️ Étiquette ${i + 1}/${copy.length} — ${size.width}×${size.height} mm…`, 'wait');
+        await printOneM110(copy[i], trackingValue);
+      }
+      setM110Status(`✅ ${copy.length} étiquette(s) imprimée(s).`, 'ok');
+      if (navigator.vibrate) navigator.vibrate([80, 40, 80]);
+    } catch (err) {
+      console.error('M110 print error:', err);
+      setM110Status('❌ Erreur d’impression : ' + (err.message || err), 'err');
+    }
+  });
+  return m110PrintQueue;
+}
+
+function makeM110TestMatch() {
+  return {
+    asin: 'B0TESTM110',
+    pdfBarcodeValue: '078885644192',
+    productName: 'Étiquette test Phomemo M110'
+  };
+}
+
+let rows = [];
+let secondRows = [];
+
+// Mémorisation locale des deux fichiers Excel (IndexedDB).
+const FILE_DB_NAME = "scanner-asin-files";
+const FILE_DB_VERSION = 1;
+const FILE_STORE_NAME = "files";
+
+function openFileDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(FILE_DB_NAME, FILE_DB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(FILE_STORE_NAME)) {
+        db.createObjectStore(FILE_STORE_NAME);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function saveFileLocally(key, file, arrayBuffer) {
+  try {
+    const db = await openFileDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(FILE_STORE_NAME, "readwrite");
+      tx.objectStore(FILE_STORE_NAME).put({
+        name: file.name || "fichier.xlsx",
+        type: file.type || "application/octet-stream",
+        lastModified: file.lastModified || Date.now(),
+        data: arrayBuffer
+      }, key);
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  } catch (err) {
+    console.warn("Impossible de mémoriser le fichier :", err);
+  }
+}
+
+async function getSavedFile(key) {
+  try {
+    const db = await openFileDb();
+    const record = await new Promise((resolve, reject) => {
+      const tx = db.transaction(FILE_STORE_NAME, "readonly");
+      const req = tx.objectStore(FILE_STORE_NAME).get(key);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    return record;
+  } catch (err) {
+    console.warn("Impossible de restaurer le fichier :", err);
+    return null;
+  }
+}
+
+function normalize(s) {
+  return String(s || "").toUpperCase().replace(/[\s\-_.]/g, "").trim();
+}
+
+function detectColumns(headers) {
+  const norm = headers.map(h => String(h || "").toLowerCase());
+  let tCol = norm.findIndex(h => h.includes("tracking") || h.includes("suivi") || h.includes("carrier"));
+  let aCol = norm.findIndex(h => h === "asin" || h.includes("asin"));
+  let pCol = norm.findIndex(h =>
+    h.includes("product name") ||
+    h.includes("nom du produit") ||
+    h.includes("product title") ||
+    h.includes("titre du produit") ||
+    h === "title" ||
+    h === "titre"
+  );
+  return { tCol, aCol, pCol };
+}
+
+function processPrimaryFileData(arrayBuffer, fileName = "", restored = false) {
+  const data = new Uint8Array(arrayBuffer);
+  const workbook = XLSX.read(data, { type: "array" });
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  const json = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+
+  if (json.length < 2) {
+    document.getElementById("status").textContent = "Fichier vide ou illisible.";
+    return;
+  }
+
+  const headers = json[0];
+  const { tCol, aCol, pCol } = detectColumns(headers);
+
+  if (tCol === -1 || aCol === -1) {
+    document.getElementById("status").textContent =
+      "⚠️ Colonnes ASIN ou Tracking non détectées automatiquement. Vérifiez les en-têtes du fichier.";
+    return;
+  }
+
+  rows = json.slice(1).map(r => ({
+    trackingNorm: normalize(r[tCol]),
+    trackingRaw: r[tCol],
+    asin: r[aCol],
+    productName: pCol !== -1 ? r[pCol] : "",
+  })).filter(r => r.trackingRaw);
+
+  const pColLabel = pCol !== -1 ? `, colonne Produit: "<strong>${headers[pCol]}</strong>"` : ' — ⚠️ colonne "Product Name" non trouvée';
+  const restoredText = restored ? " — 💾 restauré automatiquement" : "";
+  const fileText = fileName ? ` <span style="color:#555;">(${escapeHtml(fileName)})</span>` : "";
+  document.getElementById("status").innerHTML =
+    `✅ ${rows.length} lignes chargées${fileText}. Colonne suivi: "<strong>${headers[tCol]}</strong>", colonne ASIN: "<strong>${headers[aCol]}</strong>"${pColLabel}.${restoredText}`;
+  document.getElementById("scanInput").value = "";
+  searchByProductTitle(document.getElementById("productTitleSearch").value);
+}
+
+async function handleFile(file, shouldSave = true) {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    processPrimaryFileData(arrayBuffer, file.name, false);
+    if (shouldSave) await saveFileLocally("orderHistory", file, arrayBuffer);
+    document.getElementById("scanInput").focus();
+  } catch (err) {
+    document.getElementById("status").textContent = "❌ Impossible de lire le fichier : " + err;
+  }
+}
+
+document.getElementById("fileInput").addEventListener("change", function(e) {
+  if (e.target.files.length > 0) handleFile(e.target.files[0]);
+});
+
+document.getElementById("fileInput2").addEventListener("change", function(e) {
+  if (e.target.files.length > 0) handleSecondFile(e.target.files[0]);
+});
+
+function normalizeSearchText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function searchByProductTitle(value) {
+  const resultDiv = document.getElementById("productSearchResult");
+  const query = normalizeSearchText(value);
+
+  if (!query) {
+    resultDiv.innerHTML = "";
+    return;
+  }
+
+  if (rows.length === 0) {
+    resultDiv.innerHTML = '<div class="empty">Chargez d\'abord le fichier Excel fusionné.</div>';
+    return;
+  }
+
+  const terms = query.split(/\s+/).filter(Boolean);
+  const matches = rows.filter(row => {
+    const title = normalizeSearchText(row.productName);
+    return title && terms.every(term => title.includes(term));
+  });
+
+  if (matches.length === 0) {
+    resultDiv.innerHTML = '<div class="notfound">❌ Aucun titre de produit correspondant.</div>';
+    return;
+  }
+
+  const visibleMatches = matches.slice(0, 100);
+  let html = `<div class="found">✅ ${matches.length} résultat(s) trouvé(s) dans le titre du produit`;
+  if (matches.length > visibleMatches.length) html += ` — affichage des ${visibleMatches.length} premiers`;
+  html += `</div>`;
+  html += '<table><tr><th>ASIN</th><th>Titre du produit</th><th>N° de suivi</th><th>Action</th></tr>';
+
+  visibleMatches.forEach((row, index) => {
+    html += `<tr>
+      <td><strong>${escapeHtml(row.asin)}</strong></td>
+      <td>${escapeHtml(row.productName) || '<em>Non disponible</em>'}</td>
+      <td>${escapeHtml(row.trackingRaw)}</td>
+      <td><button class="barcode-btn product-search-generate" data-index="${index}">🏷️ Générer</button></td>
+    </tr>`;
+  });
+  html += '</table>';
+  resultDiv.innerHTML = html;
+
+  resultDiv.querySelectorAll(".product-search-generate").forEach(button => {
+    button.addEventListener("click", () => {
+      const row = visibleMatches[Number(button.dataset.index)];
+      if (!row) return;
+      document.getElementById("directAsinInput").value = row.asin;
+      document.getElementById("genDirectBarcode").click();
+      document.getElementById("directBarcodeResult").scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  });
+}
+
+let productSearchTimer;
+document.getElementById("productTitleSearch").addEventListener("input", function(e) {
+  clearTimeout(productSearchTimer);
+  productSearchTimer = setTimeout(() => searchByProductTitle(e.target.value), 150);
+});
+
+document.getElementById("productTitleSearch").addEventListener("keydown", function(e) {
+  if (e.key === "Enter") searchByProductTitle(e.target.value);
+});
+
+document.getElementById("clearProductSearch").addEventListener("click", function() {
+  document.getElementById("productTitleSearch").value = "";
+  document.getElementById("productSearchResult").innerHTML = "";
+  document.getElementById("productTitleSearch").focus();
+});
+
+function processSecondFileData(arrayBuffer, fileName = "", restored = false) {
+  const data = new Uint8Array(arrayBuffer);
+  const workbook = XLSX.read(data, { type: "array" });
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  const json = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+
+  if (json.length < 1) {
+    document.getElementById("status2").textContent = "2e fichier vide ou illisible.";
+    return;
+  }
+
+  secondRows = json.slice(1).map(r => {
+    const asinRaw = String(r[0] || "");
+    const tokens = (asinRaw.toUpperCase().match(/[A-Z0-9]{8,20}/g) || []).map(t => normalize(t));
+    return {
+      asinNorm: normalize(r[0]),
+      asinRaw,
+      asinTokens: tokens,
+      barcodeValue: String(r[1] || "").trim()
+    };
+  }).filter(r => r.asinRaw && r.barcodeValue);
+
+  const restoredText = restored ? " — 💾 restauré automatiquement" : "";
+  const fileText = fileName ? ` <span style="color:#555;">(${escapeHtml(fileName)})</span>` : "";
+  document.getElementById("status2").innerHTML = `✅ ${secondRows.length} lignes chargées${fileText} dans le 2e fichier. Colonne A = texte contenant l'ASIN, colonne B = code-barres.${restoredText}`;
+}
+
+async function handleSecondFile(file, shouldSave = true) {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    processSecondFileData(arrayBuffer, file.name, false);
+    if (shouldSave) await saveFileLocally("correspondence", file, arrayBuffer);
+  } catch (err) {
+    document.getElementById("status2").textContent = "❌ Impossible de lire le 2e fichier : " + err;
+  }
+}
+
+
+async function restoreSavedFiles() {
+  const [primary, secondary] = await Promise.all([
+    getSavedFile("orderHistory"),
+    getSavedFile("correspondence")
+  ]);
+
+  if (primary && primary.data) {
+    try {
+      processPrimaryFileData(primary.data, primary.name || "fichier mémorisé", true);
+    } catch (err) {
+      document.getElementById("status").textContent = "⚠️ Fichier mémorisé trouvé mais impossible à restaurer.";
+    }
+  }
+
+  if (secondary && secondary.data) {
+    try {
+      processSecondFileData(secondary.data, secondary.name || "2e fichier mémorisé", true);
+    } catch (err) {
+      document.getElementById("status2").textContent = "⚠️ 2e fichier mémorisé trouvé mais impossible à restaurer.";
+    }
+  }
+}
+
+
+function findSecondMatchByAsin(asin) {
+  const asinNorm = normalize(asin);
+  if (!asinNorm) return null;
+
+  const extractAsinLikeTokens = (text) => {
+    const raw = String(text || '').toUpperCase();
+    const tokens = raw.match(/[A-Z0-9]{10}/g) || [];
+    return tokens.map(t => normalize(t));
+  };
+
+  const exact = secondRows.find(x => x.asinNorm === asinNorm);
+  if (exact) return exact;
+
+  const tokenizedExact = secondRows.find(x => extractAsinLikeTokens(x.asinRaw).includes(asinNorm));
+  if (tokenizedExact) return tokenizedExact;
+
+  const contains = secondRows.find(x => x.asinNorm.includes(asinNorm));
+  if (contains) return contains;
+
+  return null;
+}
+
+function search(value) {
+  const resultDiv = document.getElementById("result");
+  const countDiv = document.getElementById("count");
+  if (!value) {
+    resultDiv.innerHTML = "";
+    countDiv.textContent = "";
+    return;
+  }
+  if (rows.length === 0) {
+    resultDiv.innerHTML = '<div class="empty">Chargez d\'abord un fichier ci-dessus.</div>';
+    return;
+  }
+
+  const target = normalize(value);
+  const matches = rows.filter(r => r.trackingNorm === target || r.trackingNorm.includes(target) || target.includes(r.trackingNorm)).map(r => {
+    const second = findSecondMatchByAsin(r.asin);
+    return {
+      ...r,
+      pdfBarcodeValue: second && second.barcodeValue ? second.barcodeValue : r.asin,
+      matchedSecondAsinRaw: second ? second.asinRaw : '',
+      usedFallbackAsin: !(second && second.barcodeValue)
+    };
+  });
+
+  if (matches.length === 0) {
+    resultDiv.innerHTML = '<div class="notfound">❌ Aucun ASIN trouvé pour ce numéro de suivi.</div>';
+    countDiv.textContent = "";
+    return;
+  }
+
+  countDiv.innerHTML = `<span class="found">✅ ${matches.length} article(s) trouvé(s) pour ce colis (scan: ${value})</span>`;
+
+  const labelSize = getSelectedLabelSize();
+  let html = '<div style="margin-bottom:10px; display:flex; gap:8px; flex-wrap:wrap;">'
+    + '<button class="btn m110-print-btn" id="printM110Btn" data-count="' + matches.length + '">🖨️ Imprimer sur M110 (' + matches.length + ' étiquette(s)) — ' + labelSize.width + '×' + labelSize.height + ' mm</button>'
+    + '<button class="btn" id="downloadPdfBtn">📄 Télécharger le PDF (' + matches.length + ' code(s)-barres)</button>'
+    + '</div>';
+  html += '<table><tr><th>ASIN</th><th>Nom du produit</th><th>N° de suivi</th><th>Valeur encodée</th><th>Action</th></tr>';
+  matches.forEach((m, index) => {
+    html += `<tr>
+      <td><strong>${escapeHtml(m.asin)}</strong></td>
+      <td>${escapeHtml(m.productName) || '<em>Non disponible</em>'}</td>
+      <td>${escapeHtml(m.trackingRaw)}</td>
+      <td><strong>${escapeHtml(m.pdfBarcodeValue)}</strong></td>
+      <td><button class="barcode-btn m110-print-one" data-index="${index}">🖨️ Imprimer</button></td>
+    </tr>`;
+  });
+  html += '</table>';
+  resultDiv.innerHTML = html;
+
+  document.getElementById("printM110Btn").addEventListener("click", () => manualPrintM110(matches, value));
+  resultDiv.querySelectorAll('.m110-print-one').forEach(button => {
+    button.addEventListener('click', () => {
+      const m = matches[Number(button.dataset.index)];
+      if (m) manualPrintM110([m], value);
+    });
+  });
+  document.getElementById("downloadPdfBtn").addEventListener("click", () => downloadBarcodesPdf(matches, value));
+
+  const autoDl = document.getElementById("autoDownload");
+  if (autoDl && autoDl.checked) {
+    downloadBarcodesPdf(matches, value);
+  }
+}
+
+let debounceTimer;
+document.getElementById("scanInput").addEventListener("input", function(e) {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => search(e.target.value), 150);
+});
+document.getElementById("scanInput").addEventListener("keydown", function(e) {
+  if (e.key === "Enter") search(e.target.value);
+});
+
+// Onglets Manuel / Caméra
+const tabManual = document.getElementById("tabManual");
+const tabCamera = document.getElementById("tabCamera");
+const manualZone = document.getElementById("manualZone");
+const cameraZone = document.getElementById("cameraZone");
+
+tabManual.addEventListener("click", () => {
+  tabManual.classList.add("active");
+  tabCamera.classList.remove("active");
+  manualZone.style.display = "block";
+  cameraZone.style.display = "none";
+  stopScanner();
+});
+tabCamera.addEventListener("click", () => {
+  tabCamera.classList.add("active");
+  tabManual.classList.remove("active");
+  cameraZone.style.display = "block";
+  manualZone.style.display = "none";
+});
+
+// Scanner caméra (html5-qrcode) — supporte codes-barres 1D (Code128, EAN) et QR.
+let html5QrCode = null;
+let lastScanValue = "";
+let lastScanTime = 0;
+let flashEnabled = false;
+
+document.getElementById("startCam").addEventListener("click", async () => {
+  const camStatus = document.getElementById("camStatus");
+  document.getElementById("cameraWrap").style.display = "block";
+  document.getElementById("startCam").style.display = "none";
+  document.getElementById("stopCam").style.display = "inline-block";
+  camStatus.textContent = "Initialisation de la caméra...";
+
+  html5QrCode = new Html5Qrcode("reader");
+  const config = {
+    fps: 10,
+    qrbox: { width: 280, height: 160 },
+    formatsToSupport: [
+      Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.CODE_39,
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.QR_CODE,
+      Html5QrcodeSupportedFormats.ITF,
+      Html5QrcodeSupportedFormats.UPC_A,
+    ]
+  };
+
+  try {
+    await html5QrCode.start(
+      { facingMode: "environment" },
+      config,
+      (decodedText) => {
+        const now = Date.now();
+        if (decodedText === lastScanValue && now - lastScanTime < 2000) return;
+        lastScanValue = decodedText;
+        lastScanTime = now;
+        camStatus.innerHTML = `📷 Code détecté: <strong>${decodedText}</strong>`;
+        search(decodedText);
+        if (navigator.vibrate) navigator.vibrate(150);
+      },
+      () => { /* ignore frames without a code */ }
+    );
+    camStatus.textContent = "Caméra active — visez le code-barres du colis.";
+
+    // Affiche le bouton du flash uniquement si la caméra arrière prend en charge la torche.
+    const flashBtn = document.getElementById("toggleFlash");
+    try {
+      const capabilities = html5QrCode.getRunningTrackCapabilities();
+      if (capabilities && capabilities.torch) {
+        flashBtn.style.display = "inline-block";
+      } else {
+        flashBtn.style.display = "none";
+      }
+    } catch (_) {
+      flashBtn.style.display = "none";
+    }
+  } catch (err) {
+    camStatus.textContent = "❌ Impossible d'accéder à la caméra : " + err;
+  }
+});
+
+document.getElementById("toggleFlash").addEventListener("click", async () => {
+  const flashBtn = document.getElementById("toggleFlash");
+  const camStatus = document.getElementById("camStatus");
+  if (!html5QrCode) return;
+
+  try {
+    const capabilities = html5QrCode.getRunningTrackCapabilities();
+    if (!capabilities || !capabilities.torch) {
+      flashBtn.style.display = "none";
+      camStatus.textContent = "⚠️ Le flash n'est pas pris en charge par cette caméra.";
+      return;
+    }
+
+    flashEnabled = !flashEnabled;
+    await html5QrCode.applyVideoConstraints({
+      advanced: [{ torch: flashEnabled }]
+    });
+    flashBtn.textContent = flashEnabled ? "🔦 Éteindre le flash" : "🔦 Allumer le flash";
+  } catch (err) {
+    flashEnabled = false;
+    flashBtn.textContent = "🔦 Allumer le flash";
+    camStatus.textContent = "⚠️ Impossible de modifier le flash sur cet appareil.";
+  }
+});
+
+document.getElementById("stopCam").addEventListener("click", stopScanner);
+
+document.getElementById("genDirectBarcode").addEventListener("click", () => {
+  const asin = document.getElementById("directAsinInput").value.trim();
+  const resultDiv = document.getElementById("directBarcodeResult");
+  if (!asin) { resultDiv.innerHTML = '<div class="notfound">Entrez un ASIN.</div>'; return; }
+
+  let title = "";
+  const match = rows.find(r => String(r.asin).toUpperCase() === asin.toUpperCase());
+  if (match) title = match.productName || "";
+
+  const second = findSecondMatchByAsin(asin);
+  const barcodeValue = second && second.barcodeValue ? second.barcodeValue : asin;
+  const canvas = generateBarcodeWithLabel(barcodeValue, title, asin);
+  resultDiv.innerHTML = "";
+  canvas.style.border = "1px solid #ddd";
+  canvas.style.borderRadius = "6px";
+  resultDiv.appendChild(canvas);
+
+  const dlBtn = document.createElement('button');
+  dlBtn.className = 'barcode-btn';
+  dlBtn.style.marginTop = '10px';
+  dlBtn.style.display = 'block';
+  dlBtn.textContent = '⬇️ Télécharger cette étiquette';
+  dlBtn.onclick = () => {
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `barcode_${asin}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+  };
+  resultDiv.appendChild(dlBtn);
+
+  const printBtn = document.createElement('button');
+  printBtn.className = 'barcode-btn m110-print-one';
+  printBtn.style.marginTop = '10px';
+  printBtn.style.marginLeft = '8px';
+  printBtn.textContent = '🖨️ Imprimer sur M110';
+  printBtn.onclick = () => manualPrintM110([{
+    asin,
+    pdfBarcodeValue: barcodeValue,
+    productName: title
+  }], 'ASIN direct');
+  resultDiv.appendChild(printBtn);
+
+  if (!title) {
+    const note = document.createElement('div');
+    note.style.fontSize = '12px';
+    note.style.color = '#888';
+    note.style.marginTop = '6px';
+    note.textContent = "ℹ️ Titre non trouvé dans le fichier chargé pour cet ASIN (chargez le fichier pour l'inclure automatiquement).";
+    resultDiv.appendChild(note);
+  }
+});
+
+function generateBarcodeWithLabel(barcodeValue, title, displayAsin = "") {
+  const barcodeCanvas = document.createElement('canvas');
+  JsBarcode(barcodeCanvas, String(barcodeValue || ""), {
+    format: "CODE128",
+    displayValue: false,
+    margin: 10,
+    height: 60,
+    width: 2,
+  });
+
+  const padding = 12;
+  const titleFontSize = 14;
+  const asinFontSize = 16;
+  const metaFontSize = 18;
+  const maxWidth = Math.max(barcodeCanvas.width, 320);
+
+  const finalCanvas = document.createElement('canvas');
+  const ctx = finalCanvas.getContext('2d');
+  ctx.font = `bold ${titleFontSize}px Arial`;
+
+  function wrapText(text, maxW) {
+    const words = String(text || "").split(' ');
+    const lines = [];
+    let line = '';
+    words.forEach(word => {
+      const test = line ? line + ' ' + word : word;
+      if (ctx.measureText(test).width > maxW && line) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = test;
+      }
+    });
+    if (line) lines.push(line);
+    return lines;
+  }
+
+  const titleLines = wrapText(title, maxWidth - padding * 2);
+  const titleHeight = titleLines.length * (titleFontSize + 4);
+
+  finalCanvas.width = maxWidth + padding * 2;
+  finalCanvas.height = barcodeCanvas.height + asinFontSize + metaFontSize + titleHeight + padding * 5;
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
+
+  let y = padding;
+  const bx = (finalCanvas.width - barcodeCanvas.width) / 2;
+  ctx.drawImage(barcodeCanvas, bx, y);
+  y += barcodeCanvas.height + 6;
+
+  ctx.fillStyle = '#000000';
+  ctx.font = `bold ${asinFontSize}px Arial`;
+  ctx.textAlign = 'center';
+  ctx.fillText(displayAsin || String(barcodeValue || ''), finalCanvas.width / 2, y + asinFontSize);
+  y += asinFontSize + 6;
+
+  ctx.font = `bold ${metaFontSize}px Arial`;
+  ctx.fillStyle = '#000000';
+  ctx.fillText(String(barcodeValue || ''), finalCanvas.width / 2, y + metaFontSize);
+  y += metaFontSize + 8;
+
+  ctx.fillStyle = '#000000';
+  ctx.font = `${titleFontSize}px Arial`;
+  titleLines.forEach(line => {
+    ctx.fillText(line, finalCanvas.width / 2, y + titleFontSize);
+    y += titleFontSize + 4;
+  });
+
+  return finalCanvas;
+}
+
+function downloadBarcode(canvasId, asin, title) {
+  const second = findSecondMatchByAsin(asin);
+  const encodedValue = String((second && second.barcodeValue) ? second.barcodeValue : asin).trim();
+  const finalCanvas = generateBarcodeWithLabel(encodedValue, title, asin);
+  finalCanvas.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `barcode_${asin}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+}
+
+function downloadBarcodesPdf(matches, trackingValue) {
+  const { jsPDF } = window.jspdf;
+
+  // Format compact 100 × 70 mm : une seule étiquette par page.
+  const doc = new jsPDF({
+    orientation: "landscape",
+    unit: "mm",
+    format: [100, 70],
+    compress: true
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const sideMargin = 1.5; // Marge minimale d'impression : le code-barres occupe presque toute la largeur.
+  const barcodeWidth = pageWidth - sideMargin * 2;
+  const barcodeTop = 9;
+  const barcodeHeight = 27;
+
+  matches.forEach((m, idx) => {
+    if (idx > 0) doc.addPage([100, 70], "landscape");
+
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Colis - N° de suivi: ${trackingValue}`, sideMargin, 5.5);
+
+    const encodedValue = String(m.pdfBarcodeValue || m.asin || '').trim();
+
+    // Génère uniquement les barres, puis les étire sur presque toute la largeur du PDF.
+    const barcodeOnly = document.createElement('canvas');
+    JsBarcode(barcodeOnly, encodedValue, {
+      format: "CODE128",
+      displayValue: false,
+      margin: 8,
+      height: 90,
+      width: 3
+    });
+    const barcodeImg = barcodeOnly.toDataURL("image/png");
+    doc.addImage(barcodeImg, "PNG", sideMargin, barcodeTop, barcodeWidth, barcodeHeight, undefined, "FAST");
+
+    let y = barcodeTop + barcodeHeight + 6;
+
+    doc.setTextColor(0, 0, 0);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.text(String(m.asin || encodedValue), pageWidth / 2, y, { align: "center" });
+
+    y += 6;
+    doc.setFontSize(15);
+    doc.text(encodedValue, pageWidth / 2, y, { align: "center" });
+
+    y += 5;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    const title = String(m.productName || "").trim();
+    if (title) {
+      const titleLines = doc.splitTextToSize(title, pageWidth - 6);
+      doc.text(titleLines.slice(0, 3), pageWidth / 2, y, { align: "center", maxWidth: pageWidth - 6 });
+    }
+  });
+
+  doc.save(`colis_${trackingValue}_codes-barres.pdf`);
+}
+
+
+function stopScanner() {
+  if (html5QrCode) {
+    html5QrCode.stop().then(() => {
+      html5QrCode.clear();
+      html5QrCode = null;
+    }).catch(() => {});
+  }
+  flashEnabled = false;
+  const flashBtn = document.getElementById("toggleFlash");
+  flashBtn.style.display = "none";
+  flashBtn.textContent = "🔦 Allumer le flash";
+  document.getElementById("startCam").style.display = "inline-block";
+  document.getElementById("stopCam").style.display = "none";
+  document.getElementById("cameraWrap").style.display = "none";
+  document.getElementById("camStatus").textContent = "";
+}
+
+
+// Restaure automatiquement les deux fichiers Excel mémorisés après une actualisation.
+window.addEventListener("DOMContentLoaded", () => {
+  restoreSavedFiles();
+  restoreLabelSizeUi();
+  updateM110Buttons();
+
+  document.getElementById('connectM110').addEventListener('click', () => connectM110(false));
+  document.getElementById('connectM110All').addEventListener('click', () => connectM110(true));
+  document.getElementById('disconnectM110').addEventListener('click', disconnectM110);
+  document.getElementById('labelSizePreset').addEventListener('change', updateLabelSizeUi);
+  document.getElementById('customLabelWidth').addEventListener('input', updateLabelSizeUi);
+  document.getElementById('customLabelHeight').addEventListener('input', updateLabelSizeUi);
+  document.getElementById('testM110').addEventListener('click', () => manualPrintM110([makeM110TestMatch()], 'TEST'));
+});
+
+// Mode hors ligne pour GitHub Pages / serveur HTTPS : le service worker met en cache
+// cette page et toutes les bibliothèques locales après la première ouverture en ligne.
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(err => {
+      console.warn("Service worker non disponible :", err);
+    });
+  });
+}
+</script>
+
+
+
+</body></html>
