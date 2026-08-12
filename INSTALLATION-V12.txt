@@ -1,0 +1,13 @@
+V12 — installation GitHub
+
+1. Remplacer index.html par le index.html V12.
+2. Ajouter/remplacer sw.js à la RACINE du même dépôt, juste à côté de index.html.
+3. Ne pas modifier Google Apps Script V10 ni Google Sheets.
+4. Sur chaque téléphone, ouvrir UNE FOIS : https://222-ipg.github.io/?v=12
+   Cela contourne l'ancien cache et permet à V12 d'installer le nouveau service worker.
+5. Après le premier chargement, l'adresse normale peut être utilisée.
+
+V12 utilise un service worker versionné et un mode NETWORK FIRST pour index.html :
+- en ligne : la dernière version du site est prioritaire ;
+- hors ligne : la dernière version mise en cache reste disponible ;
+- les appels Google Apps Script ne sont jamais mis en cache/interceptés par le service worker.
