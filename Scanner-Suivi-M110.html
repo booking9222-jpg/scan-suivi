@@ -103,7 +103,7 @@
     </label>
     <button class="btn printer-btn secondary" id="testM110">🧪 Imprimer une étiquette test</button>
   </div>
-  <div class="mini-note"><strong>Pas d'impression automatique :</strong> après le scan, un bouton « Imprimer sur M110 » apparaît. Tu déclenches toi-même l'impression.</div>
+  <div class="mini-note"><strong>Pas d'impression automatique :</strong> après le scan, un bouton « Imprimer sur M110 » apparaît. Tu déclenches toi-même l'impression. <strong>Mise en page renforcée :</strong> texte plus noir et présentation rapprochée du PDF.</div>
 </div>
 
 
@@ -390,7 +390,7 @@ function m110CanvasToRaster(labelCanvas) {
     for (let x = 0; x < labelCanvas.width; x++) {
       const p = (y * labelCanvas.width + x) * 4;
       const brightness = 0.299 * image.data[p] + 0.587 * image.data[p + 1] + 0.114 * image.data[p + 2];
-      if (brightness < 128) {
+      if (brightness < 185) {
         const byteX = Math.floor(x / 8) + xOffsetBytes;
         if (byteX >= 0 && byteX < outputWidthBytes) {
           out[y * outputWidthBytes + byteX] |= (1 << (7 - (x % 8)));
@@ -467,39 +467,49 @@ function generateM110LabelCanvas(match, trackingValue) {
   c.width = W;
   c.height = H;
   const ctx = c.getContext('2d');
+
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = '#000';
-  ctx.textAlign = 'center';
   ctx.imageSmoothingEnabled = false;
+  ctx.textBaseline = 'alphabetic';
 
-  const compact = H < 200;
-  const side = Math.max(6, Math.round(W * 0.025));
-  const trackingFont = Math.max(9, Math.min(12, Math.round(H * 0.048)));
-  const asinFont = Math.max(13, Math.min(20, Math.round(H * 0.075)));
-  const codeFont = Math.max(14, Math.min(22, Math.round(H * 0.085)));
-  const titleFont = Math.max(9, Math.min(14, Math.round(H * 0.052)));
+  // Mise en page volontairement proche du PDF :
+  // suivi en haut, grand code-barres, ASIN + code en gras, titre lisible en bas.
+  const side = Math.max(6, Math.round(W * 0.02));
+  const is30High = size.height <= 32;
+  const trackingFont = Math.max(11, Math.min(15, Math.round(H * 0.050)));
+  const asinFont = Math.max(17, Math.min(24, Math.round(H * 0.082)));
+  const codeFont = Math.max(18, Math.min(26, Math.round(H * 0.092)));
+  const titleFont = Math.max(11, Math.min(16, Math.round(H * 0.050)));
 
-  let y = Math.max(11, Math.round(H * 0.055));
+  // 1) Numéro de suivi : aligné à gauche comme dans le PDF.
+  let y = Math.max(trackingFont + 2, Math.round(H * 0.065));
+  ctx.textAlign = 'left';
   ctx.font = `${trackingFont}px Arial`;
-  ctx.fillText(truncateTextToWidth(ctx, `Colis: ${trackingValue || ''}`, W - side * 2), W / 2, y);
+  const trackingText = `Colis - N° de suivi: ${trackingValue || ''}`;
+  ctx.fillText(truncateTextToWidth(ctx, trackingText, W - side * 2), side, y);
 
+  // 2) Code-barres : plus haut et très proche des bords utiles.
   const bc = document.createElement('canvas');
   const barcodeValue = String(match.pdfBarcodeValue || match.asin || '');
   const barcodeModule = W >= 300 ? 2 : 1;
   JsBarcode(bc, barcodeValue, {
     format: 'CODE128',
     displayValue: false,
-    margin: 2,
-    height: Math.max(48, Math.round(H * (compact ? 0.31 : 0.35))),
+    margin: 1,
+    height: Math.max(62, Math.round(H * (is30High ? 0.34 : 0.38))),
     width: barcodeModule
   });
 
-  const barcodeTop = y + Math.max(5, Math.round(H * 0.02));
+  const barcodeTop = y + Math.max(5, Math.round(H * 0.018));
   const maxBw = W - side * 2;
-  const maxBh = Math.max(45, Math.round(H * (compact ? 0.31 : 0.36)));
+  const maxBh = Math.max(58, Math.round(H * (is30High ? 0.34 : 0.38)));
   let dw = bc.width;
   let dh = bc.height;
+
+  // On réduit seulement si nécessaire ; pas d'agrandissement artificiel qui pourrait
+  // déformer les modules du Code128.
   if (dw > maxBw || dh > maxBh) {
     const scale = Math.min(maxBw / dw, maxBh / dh);
     dw = Math.max(1, Math.floor(dw * scale));
@@ -507,20 +517,22 @@ function generateM110LabelCanvas(match, trackingValue) {
   }
   ctx.drawImage(bc, Math.round((W - dw) / 2), barcodeTop, dw, dh);
 
-  y = barcodeTop + dh + Math.max(12, Math.round(H * 0.055));
-  ctx.fillStyle = '#000';
+  // 3) ASIN + valeur encodée : nettement plus gros et gras.
+  y = barcodeTop + dh + Math.max(asinFont, Math.round(H * 0.075));
+  ctx.textAlign = 'center';
   ctx.font = `bold ${asinFont}px Arial`;
   ctx.fillText(truncateTextToWidth(ctx, String(match.asin || ''), W - side * 2), W / 2, y);
 
-  y += codeFont + Math.max(2, Math.round(H * 0.01));
+  y += codeFont + Math.max(1, Math.round(H * 0.004));
   ctx.font = `bold ${codeFont}px Arial`;
   ctx.fillText(truncateTextToWidth(ctx, barcodeValue, W - side * 2), W / 2, y);
 
-  y += titleFont + Math.max(5, Math.round(H * 0.025));
-  ctx.font = `${titleFont}px Arial`;
-  const remaining = Math.max(0, H - y - 4);
-  const lineStep = titleFont + 3;
-  const maxLines = Math.max(1, Math.min(3, Math.floor(remaining / lineStep)));
+  // 4) Titre : plus noir et plus lisible que dans la première version M110.
+  y += titleFont + Math.max(4, Math.round(H * 0.015));
+  ctx.font = `bold ${titleFont}px Arial`;
+  const remaining = Math.max(0, H - y - 3);
+  const lineStep = titleFont + 2;
+  const maxLines = Math.max(1, Math.min(size.height <= 30 ? 3 : 4, Math.floor(remaining / lineStep) + 1));
   const lines = wrapM110Text(ctx, match.productName || '', W - side * 2, maxLines);
   for (const line of lines) {
     if (y > H - 2) break;
