@@ -1,0 +1,2297 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scanner Suivi → ASIN → Phomemo M110</title>
+<script src="./Dernier Fonctionnel_files/xlsx.full.min.js.télécharger"></script>
+<script src="./Dernier Fonctionnel_files/html5-qrcode.min.js.télécharger"></script>
+<script src="./Dernier Fonctionnel_files/JsBarcode.all.min.js.télécharger"></script>
+<script src="./Dernier Fonctionnel_files/jspdf.umd.min.js.télécharger"></script>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; background:#f7f7f8; color:#111; padding:0 12px; }
+  h1 { font-size: 22px; }
+  .card { background:#fff; border:1px solid #ddd; border-radius:8px; padding:20px; margin-bottom:20px; box-shadow:0 1px 3px rgba(0,0,0,0.08); }
+  input[type=file] { margin-bottom: 10px; }
+  #scanInput {
+    width: 100%; font-size: 22px; padding: 14px; border: 2px solid #ff9900;
+    border-radius: 8px; box-sizing: border-box;
+  }
+  #status { margin-top: 8px; font-size: 14px; color: #555; }
+  table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; font-size: 14px; }
+  th { background: #ff9900; color: #fff; }
+  tr:nth-child(even) { background: #fafafa; }
+  .empty { color: #888; font-style: italic; }
+  .found { color: #2e7d32; font-weight: bold; }
+  .notfound { color: #c62828; font-weight: bold; }
+  #count { font-size: 13px; color:#555; margin-top:6px; }
+  .barcode-btn {
+    background:#111; color:#fff; border:none; border-radius:4px;
+    padding:5px 10px; font-size:12px; cursor:pointer;
+  }
+  .barcode-cell canvas { display:none; }
+  .btn {
+    background:#ff9900; color:#fff; border:none; border-radius:6px;
+    padding:10px 16px; font-size:15px; cursor:pointer; margin-right:8px; margin-bottom:10px;
+  }
+  .btn.stop { background:#c62828; }
+  #cameraWrap { display:none; margin-top:12px; }
+  #reader { width:100%; max-width:500px; border-radius:8px; overflow:hidden; }
+  .tab-toggle { display:flex; gap:8px; margin-bottom:14px; }
+  .tab-btn { flex:1; padding:10px; border:1px solid #ff9900; background:#fff; color:#ff9900; border-radius:6px; cursor:pointer; font-weight:bold; }
+  .tab-btn.active { background:#ff9900; color:#fff; }
+  #manualZone { display:block; }
+
+  .printer-card { border:2px solid #1565c0; }
+  .printer-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px; }
+  .printer-btn { background:#1565c0; }
+  .printer-btn.secondary { background:#555; }
+  .printer-btn.disconnect { background:#c62828; }
+  .printer-status { margin-top:8px; font-size:14px; font-weight:bold; }
+  .printer-status.ok { color:#2e7d32; }
+  .printer-status.err { color:#c62828; }
+  .printer-status.wait { color:#ef6c00; }
+  .mini-note { font-size:12px; color:#666; line-height:1.4; margin-top:7px; }
+  .size-box { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px; }
+  .size-box select, .size-box input { padding:9px; border:1px solid #bbb; border-radius:6px; font-size:14px; background:#fff; }
+  .size-box input { width:78px; }
+  .print-progress { height:8px; background:#eee; border-radius:6px; overflow:hidden; margin-top:8px; display:none; }
+  .print-progress > div { height:100%; width:0%; background:#1565c0; transition:width .1s linear; }
+  .m110-print-btn { background:#1565c0; font-weight:bold; }
+  .m110-print-one { background:#1565c0; }
+  .label-size-badge { display:inline-block; background:#e3f2fd; color:#0d47a1; border-radius:999px; padding:4px 9px; font-size:12px; font-weight:bold; }
+
+  /* ===== MODE OUVERTURE / RANGEMENT ===== */
+  .work-mode-switch {
+    display:flex; gap:8px; margin:0 0 16px; position:sticky; top:6px; z-index:20;
+    background:#f7f7f8; padding:6px 0;
+  }
+  .work-mode-btn {
+    flex:1; border:2px solid #444; background:#fff; color:#222; border-radius:10px;
+    padding:12px 8px; font-size:16px; font-weight:bold; cursor:pointer;
+    box-shadow:0 1px 3px rgba(0,0,0,.08);
+  }
+  .work-mode-btn.active.opening { background:#ff9900; border-color:#ff9900; color:#fff; }
+  .work-mode-btn.active.storage { background:#2e7d32; border-color:#2e7d32; color:#fff; }
+
+  .storage-card { border:2px solid #2e7d32; }
+  .storage-current {
+    background:#e8f5e9; border:1px solid #a5d6a7; border-radius:10px; padding:12px;
+    margin:10px 0 12px; text-align:center;
+  }
+  .storage-current .label { font-size:12px; color:#555; text-transform:uppercase; letter-spacing:.05em; }
+  .storage-current .value { font-size:28px; font-weight:800; color:#1b5e20; margin-top:3px; }
+  .storage-box-controls { display:grid; grid-template-columns:54px 1fr 54px; gap:8px; align-items:center; margin-top:8px; }
+  .storage-box-controls button {
+    height:48px; border:0; border-radius:9px; background:#2e7d32; color:#fff; font-size:24px; font-weight:bold; cursor:pointer;
+  }
+  #storageBoxInput {
+    height:48px; box-sizing:border-box; width:100%; text-align:center; font-size:20px; font-weight:bold;
+    border:2px solid #81c784; border-radius:9px; padding:8px;
+  }
+  #storageScanInput {
+    width:100%; box-sizing:border-box; font-size:24px; font-weight:bold; padding:16px 12px;
+    border:3px solid #2e7d32; border-radius:10px; background:#fff;
+  }
+  #storageScanInput:focus { outline:none; box-shadow:0 0 0 3px rgba(46,125,50,.15); }
+  .storage-status {
+    margin-top:10px; min-height:46px; border-radius:8px; padding:10px 12px; box-sizing:border-box;
+    background:#f5f5f5; font-size:15px; font-weight:bold;
+  }
+  .storage-status.ok { background:#e8f5e9; color:#1b5e20; }
+  .storage-status.err { background:#ffebee; color:#b71c1c; }
+  .storage-status.info { background:#e3f2fd; color:#0d47a1; }
+  .storage-stats { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+  .storage-stat { background:#fafafa; border:1px solid #ddd; border-radius:8px; padding:10px; text-align:center; }
+  .storage-stat strong { display:block; font-size:23px; margin-top:2px; }
+  .storage-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+  .storage-actions .btn { margin:0; }
+  .storage-history { margin-top:14px; }
+  .storage-history-item {
+    display:grid; grid-template-columns:62px 1fr auto; gap:8px; align-items:center;
+    border-top:1px solid #eee; padding:9px 2px; font-size:13px;
+  }
+  .storage-history-item:first-child { border-top:0; }
+  .storage-history-time { color:#777; }
+  .storage-history-main strong { font-size:14px; }
+  .storage-history-box { background:#e8f5e9; color:#1b5e20; border-radius:999px; padding:4px 8px; font-weight:bold; white-space:nowrap; }
+  .storage-lookup { margin-top:16px; padding-top:14px; border-top:1px solid #ddd; }
+  .storage-lookup-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  #storageLookupInput { flex:1; min-width:180px; padding:11px; font-size:16px; border:1px solid #bbb; border-radius:8px; }
+  @media (max-width:560px) {
+    body { margin-top:10px; }
+    .card { padding:14px; }
+    .work-mode-switch { top:0; }
+    .work-mode-btn { font-size:14px; padding:11px 5px; }
+    .storage-history-item { grid-template-columns:48px 1fr; }
+    .storage-history-box { grid-column:2; justify-self:start; }
+  }
+</style>
+</head>
+<body>
+
+<h1>📦 Scanner un colis → obtenir les ASIN → 🖨️ M110</h1>
+
+<div class="work-mode-switch">
+  <button class="work-mode-btn opening active" id="modeOpeningBtn">📦 Ouverture / étiquettes</button>
+  <button class="work-mode-btn storage" id="modeStorageBtn">🗃️ Rangement</button>
+</div>
+
+<div id="openingMode">
+
+<div class="card printer-card" id="m110Card">
+  <strong>🖨️ Phomemo M110 — impression Bluetooth directe</strong>
+  <div class="printer-row">
+    <button class="btn printer-btn" id="connectM110">🔵 Connecter la M110</button>
+    <button class="btn printer-btn secondary" id="connectM110All">🔎 Connexion avancée</button>
+    <button class="btn printer-btn disconnect" id="disconnectM110" style="display:none;">Déconnecter</button>
+  </div>
+  <div id="m110Status" class="printer-status wait">M110 non connectée.</div>
+  <div class="print-progress" id="m110Progress"><div id="m110ProgressBar"></div></div>
+
+  <div style="margin-top:14px;"><strong>📐 Taille de l'étiquette</strong></div>
+  <div class="size-box">
+    <select id="labelSizePreset">
+      <option value="40x30" selected>40 × 30 mm</option>
+      <option value="50x30">50 × 30 mm</option>
+      <option value="custom">Autre taille…</option>
+    </select>
+    <div id="customSizeWrap" style="display:none; align-items:center; gap:6px; flex-wrap:wrap;">
+      <label>Largeur <input type="number" id="customLabelWidth" min="20" max="50" step="1" value="40"> mm</label>
+      <label>Hauteur <input type="number" id="customLabelHeight" min="10" max="100" step="1" value="30"> mm</label>
+    </div>
+    <span id="activeLabelSize" class="label-size-badge">40 × 30 mm</span>
+  </div>
+  <div class="mini-note">La M110 accepte des étiquettes jusqu'à 50 mm de large. Sa tête imprime environ 48 mm au maximum : sur une étiquette de 50 mm, le contenu est centré avec une petite marge latérale.</div>
+
+  <div class="printer-row">
+    <label style="font-size:13px;">Densité :
+      <select id="m110Density" style="padding:7px; border:1px solid #bbb; border-radius:6px;">
+        <option value="4">4 — clair</option>
+        <option value="5">5</option>
+        <option value="6" selected>6 — normal</option>
+        <option value="7">7</option>
+        <option value="8">8 — foncé</option>
+      </select>
+    </label>
+    <button class="btn printer-btn secondary" id="testM110">🧪 Imprimer une étiquette test</button>
+  </div>
+  <label style="display:flex; align-items:center; gap:8px; margin-top:10px; font-size:14px; font-weight:bold; color:#1b5e20;">
+    <input type="checkbox" id="autoPrintSingle" checked>
+    ⚡ Auto-imprimer si le colis contient 1 seul produit
+  </label>
+  <div class="mini-note"><strong>Auto-impression sécurisée :</strong> si exactement 1 article est trouvé et que la M110 est déjà connectée, l'étiquette part immédiatement. Pour 2 articles ou plus, l'impression reste manuelle. Si la M110 n'est pas connectée, rien ne part automatiquement et le bouton d'impression reste disponible.</div>
+</div>
+
+
+<div class="card" id="githubSyncCard">
+  <strong>☁️ Données automatiques GitHub</strong>
+  <div id="githubSyncStatus" style="margin-top:8px;font-size:14px;color:#555;">Initialisation…</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+    <button class="btn" id="refreshGithubData" style="margin:0;">🔄 Vérifier maintenant</button>
+  </div>
+  <div class="mini-note">Le site récupère automatiquement le dernier historique Amazon et la correspondance Cdiscount publiés par V20. En cas de coupure Internet, la dernière version enregistrée sur ce téléphone reste disponible. Les sélecteurs manuels ci-dessous restent disponibles en secours.</div>
+</div>
+
+<div class="card">
+  <strong>1. Chargez votre export Amazon (Order History) :</strong><br>
+  <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+  <div id="status">Aucun fichier chargé.</div>
+</div>
+
+<div class="card">
+  <strong>🔎 Rechercher dans le titre du produit du fichier Excel fusionné</strong>
+  <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+    <input type="text" id="productTitleSearch" placeholder="Ex. imprimante, chargeur, Samsung..." style="flex:1; min-width:200px; padding:10px; font-size:15px; border:1px solid #ccc; border-radius:6px;">
+    <button class="btn" id="clearProductSearch" style="background:#555;">Effacer</button>
+  </div>
+  <div id="productSearchResult" style="margin-top:12px;"></div>
+</div>
+
+<div class="card">
+  <strong>2. Chargez un 2e fichier Excel de correspondance :</strong><br>
+  <div style="font-size:13px;color:#555;margin:6px 0 10px;">La colonne A doit contenir l'ASIN, la colonne B le code-barres à utiliser dans le PDF.</div>
+  <input type="file" id="fileInput2" accept=".xlsx,.xls,.csv">
+  <div id="status2">Aucun 2e fichier chargé.</div>
+</div>
+
+<div class="card">
+  <strong>🏷️ Générer un code-barres directement à partir d'un ASIN</strong>
+  <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+    <input type="text" id="directAsinInput" placeholder="Coller un ASIN (ex: B0FK5B3T...)" style="flex:1; min-width:200px; padding:10px; font-size:15px; border:1px solid #ccc; border-radius:6px;">
+    <button class="btn" id="genDirectBarcode">🏷️ Générer</button>
+  </div>
+  <div id="directBarcodeResult" style="margin-top:12px;"></div>
+</div>
+
+<div class="card">
+  <div class="tab-toggle">
+    <button class="tab-btn active" id="tabManual">⌨️ Douchette / saisie</button>
+    <button class="tab-btn" id="tabCamera">📷 Caméra</button>
+  </div>
+
+  <div id="manualZone">
+    <input type="text" id="scanInput" placeholder="Scanner ou coller le numéro de suivi..." autofocus="">
+  </div>
+
+  <div id="cameraZone" style="display:none;">
+    <button class="btn" id="startCam">▶️ Démarrer la caméra</button>
+    <button class="btn" id="toggleFlash" style="display:none; background:#555;">🔦 Allumer le flash</button>
+    <button class="btn stop" id="stopCam" style="display:none;">⏹ Arrêter</button>
+    <div id="cameraWrap">
+      <div id="reader"></div>
+    </div>
+    <div id="camStatus" style="font-size:13px;color:#555;margin-top:6px;"></div>
+  </div>
+
+  <label style="display:flex; align-items:center; gap:6px; margin-top:8px; font-size:13px; color:#333;">
+    <input type="checkbox" id="autoDownload">
+    Télécharger automatiquement le PDF dès qu'un colis est trouvé
+  </label>
+  <div id="count"></div>
+  <div id="result"></div>
+</div>
+</div><!-- /openingMode -->
+
+<div id="storageMode" style="display:none;">
+  <div class="card storage-card">
+    <strong style="font-size:20px;">🗃️ Rangement rapide des produits</strong>
+    <div class="mini-note" style="font-size:13px;">
+      Le lecteur Bluetooth fonctionne comme un clavier. Choisis la caisse une fois, puis scanne les codes-barres déjà imprimés sur les produits :
+      <strong>chaque scan est enregistré immédiatement, sans bouton et sans toucher l'écran.</strong><br>
+      🔊 <strong>1 bip aigu + vibration courte</strong> = enregistré · 📦 <strong>2 bips aigus</strong> = caisse changée · ⚠️ <strong>2 bips graves + double vibration</strong> = doublon rapide ignoré · ❌ <strong>signal grave</strong> = erreur.
+    </div>
+
+    <div class="storage-current">
+      <div class="label">Caisse active</div>
+      <div class="value" id="storageCurrentBoxLabel">CD-ZH 12</div>
+      <div class="storage-box-controls">
+        <button id="storagePrevBox" title="Caisse précédente">−</button>
+        <input id="storageBoxInput" type="text" value="CD-ZH 12" autocomplete="off" spellcheck="false">
+        <button id="storageNextBox" title="Caisse suivante">+</button>
+      </div>
+      <button class="btn" id="storagePrintBoxLabel" style="background:#2e7d32; margin:10px 0 0;">🖨️ Imprimer l’étiquette de la caisse</button>
+      <button class="btn" id="storageNextAndPrintBox" style="background:#00695c; margin:8px 0 0;">✅ Caisse pleine → suivante + imprimer</button>
+      <div class="mini-note">Étiquette optimisée : <strong>nom de caisse très grand + Code128 large et haut</strong>. Le code encode <strong>BOX:&lt;nom de caisse&gt;</strong> : un scan rend immédiatement cette caisse active. Le bouton « caisse pleine » passe à la caisse suivante et imprime sa nouvelle étiquette en une seule action.</div>
+    </div>
+
+    <div style="margin-top:14px;"><strong style="font-size:17px;">📡 Scanner les produits</strong></div>
+    <input id="storageScanInput" type="text" inputmode="none" autocomplete="off" autocapitalize="characters"
+           placeholder="Scanne un produit…" aria-label="Scanner un produit">
+    <div id="storageStatus" class="storage-status info">✅ Prêt — scanne un produit.</div>
+
+    <div class="storage-stats">
+      <div class="storage-stat">Dans cette caisse<strong id="storageBoxCount">0</strong></div>
+      <div class="storage-stat">Total rangé<strong id="storageTotalCount">0</strong></div>
+    </div>
+
+    <div class="storage-actions">
+      <button class="btn" id="storageUndoBtn" style="background:#ef6c00;">↩️ Annuler le dernier scan</button>
+      <button class="btn" id="storageExportBtn" style="background:#1565c0;">📥 Exporter Excel</button>
+      <button class="btn" id="storageClearBtn" style="background:#c62828;">🗑️ Vider l'historique</button>
+    </div>
+
+    <div class="storage-history">
+      <strong>Derniers rangements</strong>
+      <div id="storageHistoryList"></div>
+    </div>
+
+    <div class="storage-lookup">
+      <strong>🔎 Retrouver un produit</strong>
+      <div class="storage-lookup-row">
+        <input id="storageLookupInput" type="text" placeholder="ASIN ou code-barres…" autocomplete="off">
+        <button class="btn" id="storageLookupBtn" style="background:#555;">Chercher</button>
+      </div>
+      <div id="storageLookupResult" style="margin-top:8px;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+
+// =============================================================
+// PHOMEMO M110 — Web Bluetooth + protocole M110
+// Préparé pour une utilisation manuelle : le scan trouve le colis,
+// l'impression ne part que lorsqu'on appuie sur le bouton Imprimer.
+// =============================================================
+const M110_BLE = {
+  services: [
+    0xff00,
+    0xffe0,
+    0xae30,
+    '0000ff00-0000-1000-8000-00805f9b34fb',
+    '0000ffe0-0000-1000-8000-00805f9b34fb',
+    '49535343-fe7d-4ae5-8fa9-9fafd205e455'
+  ],
+  preferredWriteCharacteristic: 0xff02,
+  chunkSize: 128,
+  chunkDelay: 20
+};
+
+const M110_DPI = 203;
+const M110_MAX_PRINTABLE_MM = 48;
+const M110_HEAD_DOTS = 384;
+const M110_HEAD_BYTES = 48;
+
+let m110Device = null;
+let m110Server = null;
+let m110Service = null;
+let m110WriteChar = null;
+let m110UseWriteWithResponse = false;
+let m110PrintQueue = Promise.resolve();
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+function setM110Status(text, type = 'wait') {
+  const el = document.getElementById('m110Status');
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'printer-status ' + type;
+}
+
+function setM110Progress(percent, visible = true) {
+  const wrap = document.getElementById('m110Progress');
+  const bar = document.getElementById('m110ProgressBar');
+  if (!wrap || !bar) return;
+  wrap.style.display = visible ? 'block' : 'none';
+  bar.style.width = Math.max(0, Math.min(100, percent)) + '%';
+}
+
+function isM110Connected() {
+  return !!(m110Device && m110Device.gatt && m110Device.gatt.connected && m110WriteChar);
+}
+
+function updateM110Buttons() {
+  const connected = isM110Connected();
+  const b1 = document.getElementById('connectM110');
+  const b2 = document.getElementById('connectM110All');
+  const bd = document.getElementById('disconnectM110');
+  if (b1) b1.style.display = connected ? 'none' : 'inline-block';
+  if (b2) b2.style.display = connected ? 'none' : 'inline-block';
+  if (bd) bd.style.display = connected ? 'inline-block' : 'none';
+}
+
+async function connectM110(showAll = false) {
+  if (!('bluetooth' in navigator)) {
+    setM110Status('❌ Web Bluetooth indisponible. Utilisez Chrome/Edge Android avec la page en HTTPS.', 'err');
+    return false;
+  }
+
+  try {
+    setM110Status('Recherche de la M110…', 'wait');
+    const requestOptions = showAll ? {
+      acceptAllDevices: true,
+      optionalServices: M110_BLE.services
+    } : {
+      filters: [
+        { namePrefix: 'M110' },
+        { namePrefix: 'M120' },
+        { namePrefix: 'Phomemo' }
+      ],
+      optionalServices: M110_BLE.services
+    };
+
+    m110Device = await navigator.bluetooth.requestDevice(requestOptions);
+    if (!m110Device) throw new Error('Aucune imprimante sélectionnée.');
+
+    m110Device.addEventListener('gattserverdisconnected', () => {
+      m110Server = null;
+      m110Service = null;
+      m110WriteChar = null;
+      setM110Status('⚠️ M110 déconnectée. Appuyez sur Connecter pour reprendre.', 'err');
+      setM110Progress(0, false);
+      updateM110Buttons();
+    });
+
+    setM110Status(`Connexion à ${m110Device.name || 'M110'}…`, 'wait');
+    m110Server = await m110Device.gatt.connect();
+    await sleep(150);
+
+    let lastError = null;
+    for (const serviceUuid of M110_BLE.services) {
+      try {
+        const service = await m110Server.getPrimaryService(serviceUuid);
+        let writeChar = null;
+        try {
+          writeChar = await service.getCharacteristic(M110_BLE.preferredWriteCharacteristic);
+        } catch (_) {
+          const chars = await service.getCharacteristics();
+          writeChar = chars.find(c => c.properties.writeWithoutResponse || c.properties.write) || null;
+        }
+        if (writeChar) {
+          m110Service = service;
+          m110WriteChar = writeChar;
+          m110UseWriteWithResponse = !writeChar.properties.writeWithoutResponse && !!writeChar.properties.write;
+          break;
+        }
+      } catch (err) {
+        lastError = err;
+      }
+    }
+
+    if (!m110WriteChar) {
+      throw new Error('Service Bluetooth compatible introuvable' + (lastError ? ` (${lastError.message})` : ''));
+    }
+
+    setM110Status(`✅ ${m110Device.name || 'M110'} connectée — prête à imprimer`, 'ok');
+    updateM110Buttons();
+    return true;
+  } catch (err) {
+    console.error('M110 connect error:', err);
+    setM110Status('❌ Connexion M110 impossible : ' + (err.message || err), 'err');
+    updateM110Buttons();
+    return false;
+  }
+}
+
+function disconnectM110() {
+  try {
+    if (m110Device?.gatt?.connected) m110Device.gatt.disconnect();
+  } catch (_) {}
+  m110Server = null;
+  m110Service = null;
+  m110WriteChar = null;
+  setM110Status('M110 non connectée.', 'wait');
+  setM110Progress(0, false);
+  updateM110Buttons();
+}
+
+async function m110Send(bytes) {
+  if (!isM110Connected()) throw new Error('M110 non connectée');
+  const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  if (m110UseWriteWithResponse) {
+    await m110WriteChar.writeValue(data);
+  } else {
+    try {
+      await m110WriteChar.writeValueWithoutResponse(data);
+    } catch (_) {
+      m110UseWriteWithResponse = true;
+      await m110WriteChar.writeValue(data);
+    }
+  }
+}
+
+function mmToDots(mm) {
+  return Math.max(1, Math.round(Number(mm) * M110_DPI / 25.4));
+}
+
+function getSelectedLabelSize() {
+  const preset = document.getElementById('labelSizePreset')?.value || '40x30';
+  let width = 40, height = 30;
+  if (preset === '50x30') {
+    width = 50; height = 30;
+  } else if (preset === 'custom') {
+    width = Number(document.getElementById('customLabelWidth')?.value || 40);
+    height = Number(document.getElementById('customLabelHeight')?.value || 30);
+  }
+  width = Math.max(20, Math.min(50, width));
+  height = Math.max(10, Math.min(100, height));
+  return { width, height, printableWidth: Math.min(width, M110_MAX_PRINTABLE_MM) };
+}
+
+function updateLabelSizeUi() {
+  const preset = document.getElementById('labelSizePreset')?.value || '40x30';
+  const custom = document.getElementById('customSizeWrap');
+  if (custom) custom.style.display = preset === 'custom' ? 'flex' : 'none';
+  const size = getSelectedLabelSize();
+  const badge = document.getElementById('activeLabelSize');
+  if (badge) badge.textContent = `${size.width} × ${size.height} mm`;
+  const printBtn = document.getElementById('printM110Btn');
+  if (printBtn && printBtn.dataset.count) {
+    printBtn.textContent = `🖨️ Imprimer sur M110 (${printBtn.dataset.count} étiquette(s)) — ${size.width}×${size.height} mm`;
+  }
+  try {
+    localStorage.setItem('m110LabelSizePreset', preset);
+    localStorage.setItem('m110CustomWidth', String(size.width));
+    localStorage.setItem('m110CustomHeight', String(size.height));
+  } catch (_) {}
+}
+
+function restoreLabelSizeUi() {
+  try {
+    const preset = localStorage.getItem('m110LabelSizePreset');
+    if (preset && ['40x30','50x30','custom'].includes(preset)) document.getElementById('labelSizePreset').value = preset;
+    const w = localStorage.getItem('m110CustomWidth');
+    const h = localStorage.getItem('m110CustomHeight');
+    if (w) document.getElementById('customLabelWidth').value = w;
+    if (h) document.getElementById('customLabelHeight').value = h;
+  } catch (_) {}
+  updateLabelSizeUi();
+}
+
+function m110CanvasToRaster(labelCanvas) {
+  const outputWidthBytes = M110_HEAD_BYTES;
+  const ctx = labelCanvas.getContext('2d', { willReadFrequently: true });
+  const image = ctx.getImageData(0, 0, labelCanvas.width, labelCanvas.height);
+  const srcWidthBytes = Math.ceil(labelCanvas.width / 8);
+  const xOffsetBytes = Math.max(0, Math.floor((outputWidthBytes - srcWidthBytes) / 2));
+  const out = new Uint8Array(outputWidthBytes * labelCanvas.height);
+
+  for (let y = 0; y < labelCanvas.height; y++) {
+    for (let x = 0; x < labelCanvas.width; x++) {
+      const p = (y * labelCanvas.width + x) * 4;
+      const brightness = 0.299 * image.data[p] + 0.587 * image.data[p + 1] + 0.114 * image.data[p + 2];
+      if (brightness < 185) {
+        const byteX = Math.floor(x / 8) + xOffsetBytes;
+        if (byteX >= 0 && byteX < outputWidthBytes) {
+          out[y * outputWidthBytes + byteX] |= (1 << (7 - (x % 8)));
+        }
+      }
+    }
+  }
+  return { data: out, widthBytes: outputWidthBytes, heightLines: labelCanvas.height };
+}
+
+async function printRasterM110(raster, density = 6, onProgress = null) {
+  if (!isM110Connected()) throw new Error('M110 non connectée');
+  const densityValue = Math.round(5 + Math.max(1, Math.min(8, density)) * 1.25);
+
+  // Vitesse, densité, papier avec espace (GAP), raster, fin d'étiquette.
+  await m110Send([0x1b, 0x4e, 0x0d, 0x05]);
+  await sleep(30);
+  await m110Send([0x1b, 0x4e, 0x04, densityValue]);
+  await sleep(30);
+  await m110Send([0x1f, 0x11, 0x0a]);
+  await sleep(30);
+
+  const h = raster.heightLines;
+  await m110Send(new Uint8Array([
+    0x1d, 0x76, 0x30, 0x00,
+    raster.widthBytes & 0xff, (raster.widthBytes >> 8) & 0xff,
+    h & 0xff, (h >> 8) & 0xff
+  ]));
+
+  const total = raster.data.length;
+  for (let i = 0; i < total; i += M110_BLE.chunkSize) {
+    const chunk = raster.data.slice(i, Math.min(i + M110_BLE.chunkSize, total));
+    await m110Send(chunk);
+    await sleep(M110_BLE.chunkDelay);
+    if (onProgress) onProgress(Math.round((i + chunk.length) / total * 100));
+  }
+
+  await sleep(250);
+  await m110Send([0x1f, 0xf0, 0x05, 0x00, 0x1f, 0xf0, 0x03, 0x00]);
+  await sleep(450);
+}
+
+function truncateTextToWidth(ctx, text, maxWidth) {
+  let str = String(text || '');
+  if (ctx.measureText(str).width <= maxWidth) return str;
+  while (str.length > 1 && ctx.measureText(str + '…').width > maxWidth) str = str.slice(0, -1);
+  return str + '…';
+}
+
+function wrapM110Text(ctx, text, maxWidth, maxLines = 3) {
+  const words = String(text || '').trim().split(/\s+/).filter(Boolean);
+  const lines = [];
+  let line = '';
+  for (const word of words) {
+    const test = line ? `${line} ${word}` : word;
+    if (ctx.measureText(test).width <= maxWidth) {
+      line = test;
+    } else {
+      if (line) lines.push(line);
+      line = word;
+      if (lines.length >= maxLines - 1) break;
+    }
+  }
+  if (line && lines.length < maxLines) lines.push(line);
+  if (lines.length === maxLines) lines[maxLines - 1] = truncateTextToWidth(ctx, lines[maxLines - 1], maxWidth);
+  return lines;
+}
+
+function generateM110LabelCanvas(match, trackingValue) {
+  const size = getSelectedLabelSize();
+  const W = Math.min(M110_HEAD_DOTS, mmToDots(size.printableWidth));
+  const H = mmToDots(size.height);
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const ctx = c.getContext('2d');
+
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#000';
+  ctx.imageSmoothingEnabled = false;
+  ctx.textBaseline = 'alphabetic';
+
+  // Mise en page volontairement proche du PDF :
+  // suivi en haut, grand code-barres, ASIN + code en gras, titre lisible en bas.
+  const side = Math.max(6, Math.round(W * 0.02));
+  const is30High = size.height <= 32;
+  const trackingFont = Math.max(11, Math.min(15, Math.round(H * 0.050)));
+  const asinFont = Math.max(17, Math.min(24, Math.round(H * 0.082)));
+  const codeFont = Math.max(18, Math.min(26, Math.round(H * 0.092)));
+  const titleFont = Math.max(11, Math.min(16, Math.round(H * 0.050)));
+
+  // 1) Numéro de suivi : aligné à gauche comme dans le PDF.
+  let y = Math.max(trackingFont + 2, Math.round(H * 0.065));
+  ctx.textAlign = 'left';
+  ctx.font = `${trackingFont}px Arial`;
+  const trackingText = `Colis - N° de suivi: ${trackingValue || ''}`;
+  ctx.fillText(truncateTextToWidth(ctx, trackingText, W - side * 2), side, y);
+
+  // 2) Code-barres : plus haut et très proche des bords utiles.
+  const bc = document.createElement('canvas');
+  const barcodeValue = String(match.pdfBarcodeValue || match.asin || '');
+  const barcodeModule = W >= 300 ? 2 : 1;
+  JsBarcode(bc, barcodeValue, {
+    format: 'CODE128',
+    displayValue: false,
+    margin: 1,
+    height: Math.max(62, Math.round(H * (is30High ? 0.34 : 0.38))),
+    width: barcodeModule
+  });
+
+  const barcodeTop = y + Math.max(5, Math.round(H * 0.018));
+  const maxBw = W - side * 2;
+  const maxBh = Math.max(58, Math.round(H * (is30High ? 0.34 : 0.38)));
+  let dw = bc.width;
+  let dh = bc.height;
+
+  // On réduit seulement si nécessaire ; pas d'agrandissement artificiel qui pourrait
+  // déformer les modules du Code128.
+  if (dw > maxBw || dh > maxBh) {
+    const scale = Math.min(maxBw / dw, maxBh / dh);
+    dw = Math.max(1, Math.floor(dw * scale));
+    dh = Math.max(1, Math.floor(dh * scale));
+  }
+  ctx.drawImage(bc, Math.round((W - dw) / 2), barcodeTop, dw, dh);
+
+  // 3) ASIN + valeur encodée : nettement plus gros et gras.
+  y = barcodeTop + dh + Math.max(asinFont, Math.round(H * 0.075));
+  ctx.textAlign = 'center';
+  ctx.font = `bold ${asinFont}px Arial`;
+  ctx.fillText(truncateTextToWidth(ctx, String(match.asin || ''), W - side * 2), W / 2, y);
+
+  y += codeFont + Math.max(1, Math.round(H * 0.004));
+  ctx.font = `bold ${codeFont}px Arial`;
+  ctx.fillText(truncateTextToWidth(ctx, barcodeValue, W - side * 2), W / 2, y);
+
+  // 4) Titre : plus noir et plus lisible que dans la première version M110.
+  y += titleFont + Math.max(4, Math.round(H * 0.015));
+  ctx.font = `bold ${titleFont}px Arial`;
+  const remaining = Math.max(0, H - y - 3);
+  const lineStep = titleFont + 2;
+  const maxLines = Math.max(1, Math.min(size.height <= 30 ? 3 : 4, Math.floor(remaining / lineStep) + 1));
+  const lines = wrapM110Text(ctx, match.productName || '', W - side * 2, maxLines);
+  for (const line of lines) {
+    if (y > H - 2) break;
+    ctx.fillText(line, W / 2, y);
+    y += lineStep;
+  }
+
+  return c;
+}
+
+async function printOneM110(match, trackingValue) {
+  const canvas = generateM110LabelCanvas(match, trackingValue);
+  const raster = m110CanvasToRaster(canvas);
+  const density = Number(document.getElementById('m110Density')?.value || 6);
+  setM110Progress(0, true);
+  await printRasterM110(raster, density, p => setM110Progress(p, true));
+  setM110Progress(100, true);
+  setTimeout(() => setM110Progress(0, false), 800);
+}
+
+async function manualPrintM110(matches, trackingValue) {
+  // IMPORTANT : requestDevice() est appelé directement depuis le clic utilisateur,
+  // afin que Chrome Android autorise l'ouverture du sélecteur Bluetooth.
+  if (!isM110Connected()) {
+    const connected = await connectM110(false);
+    if (!connected) return;
+  }
+  return queueM110Print(matches, trackingValue);
+}
+
+function queueM110Print(matches, trackingValue) {
+  const copy = Array.isArray(matches) ? matches.slice() : [];
+  if (!copy.length) return Promise.resolve();
+  if (!isM110Connected()) {
+    setM110Status('⚠️ M110 non connectée. Appuyez de nouveau sur Imprimer pour vous connecter.', 'err');
+    return Promise.resolve();
+  }
+
+  m110PrintQueue = m110PrintQueue.then(async () => {
+    try {
+      const size = getSelectedLabelSize();
+      setM110Status(`🖨️ Impression de ${copy.length} étiquette(s) en ${size.width}×${size.height} mm…`, 'wait');
+      for (let i = 0; i < copy.length; i++) {
+        setM110Status(`🖨️ Étiquette ${i + 1}/${copy.length} — ${size.width}×${size.height} mm…`, 'wait');
+        await printOneM110(copy[i], trackingValue);
+      }
+      setM110Status(`✅ ${copy.length} étiquette(s) imprimée(s).`, 'ok');
+      if (navigator.vibrate) navigator.vibrate([80, 40, 80]);
+    } catch (err) {
+      console.error('M110 print error:', err);
+      setM110Status('❌ Erreur d’impression : ' + (err.message || err), 'err');
+    }
+  });
+  return m110PrintQueue;
+}
+
+function makeM110TestMatch() {
+  return {
+    asin: 'B0TESTM110',
+    pdfBarcodeValue: '078885644192',
+    productName: 'Étiquette test Phomemo M110'
+  };
+}
+
+let rows = [];
+let secondRows = [];
+
+// Auto-impression : uniquement lorsqu'un colis correspond à un seul produit.
+const AUTO_PRINT_SINGLE_KEY = "m110-auto-print-single-v1";
+let lastAutoPrintKey = "";
+let lastAutoPrintTime = 0;
+
+function isAutoPrintSingleEnabled() {
+  const cb = document.getElementById("autoPrintSingle");
+  return !!(cb && cb.checked);
+}
+
+function restoreAutoPrintSingleUi() {
+  const cb = document.getElementById("autoPrintSingle");
+  if (!cb) return;
+  try {
+    const saved = localStorage.getItem(AUTO_PRINT_SINGLE_KEY);
+    cb.checked = saved === null ? true : saved === "1";
+  } catch (_) {
+    cb.checked = true;
+  }
+  cb.addEventListener("change", () => {
+    try { localStorage.setItem(AUTO_PRINT_SINGLE_KEY, cb.checked ? "1" : "0"); } catch (_) {}
+  });
+}
+
+function maybeAutoPrintSingle(matches, trackingValue) {
+  if (!isAutoPrintSingleEnabled() || !Array.isArray(matches) || matches.length !== 1) return;
+
+  // Sécurité : l'auto-impression ne part que sur un numéro de suivi complet/exact,
+  // jamais pendant qu'un numéro est encore en train d'être tapé.
+  const trackingNorm = normalize(trackingValue);
+  if (!rows.some(r => r.trackingNorm === trackingNorm)) return;
+
+  const key = trackingNorm + "|" + normalize(matches[0].asin);
+  const now = Date.now();
+  // search() peut être déclenchée à la fois par le debounce et par Entrée :
+  // cette garde évite donc deux impressions du même scan.
+  if (key === lastAutoPrintKey && now - lastAutoPrintTime < 5000) return;
+
+  if (!isM110Connected()) {
+    setM110Status("⚠️ 1 produit trouvé — auto-impression prête dès que la M110 est connectée. Utilisez Imprimer pour cette fois.", "err");
+    return;
+  }
+
+  lastAutoPrintKey = key;
+  lastAutoPrintTime = now;
+  setM110Status("⚡ 1 produit trouvé — impression automatique…", "wait");
+  queueM110Print(matches, trackingValue);
+}
+
+// Mémorisation locale des deux fichiers Excel (IndexedDB).
+const FILE_DB_NAME = "scanner-asin-files";
+const FILE_DB_VERSION = 1;
+const FILE_STORE_NAME = "files";
+
+function openFileDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(FILE_DB_NAME, FILE_DB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(FILE_STORE_NAME)) {
+        db.createObjectStore(FILE_STORE_NAME);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function saveFileLocally(key, file, arrayBuffer) {
+  try {
+    const db = await openFileDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(FILE_STORE_NAME, "readwrite");
+      tx.objectStore(FILE_STORE_NAME).put({
+        name: file.name || "fichier.xlsx",
+        type: file.type || "application/octet-stream",
+        lastModified: file.lastModified || Date.now(),
+        data: arrayBuffer
+      }, key);
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  } catch (err) {
+    console.warn("Impossible de mémoriser le fichier :", err);
+  }
+}
+
+async function getSavedFile(key) {
+  try {
+    const db = await openFileDb();
+    const record = await new Promise((resolve, reject) => {
+      const tx = db.transaction(FILE_STORE_NAME, "readonly");
+      const req = tx.objectStore(FILE_STORE_NAME).get(key);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    return record;
+  } catch (err) {
+    console.warn("Impossible de restaurer le fichier :", err);
+    return null;
+  }
+}
+
+function normalize(s) {
+  return String(s || "").toUpperCase().replace(/[\s\-_.]/g, "").trim();
+}
+
+function detectColumns(headers) {
+  const norm = headers.map(h => String(h || "").toLowerCase());
+  let tCol = norm.findIndex(h => h.includes("tracking") || h.includes("suivi") || h.includes("carrier"));
+  let aCol = norm.findIndex(h => h === "asin" || h.includes("asin"));
+  let pCol = norm.findIndex(h =>
+    h.includes("product name") ||
+    h.includes("nom du produit") ||
+    h.includes("product title") ||
+    h.includes("titre du produit") ||
+    h === "title" ||
+    h === "titre"
+  );
+  return { tCol, aCol, pCol };
+}
+
+function processPrimaryFileData(arrayBuffer, fileName = "", restored = false) {
+  const data = new Uint8Array(arrayBuffer);
+  const workbook = XLSX.read(data, { type: "array" });
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  const json = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+
+  if (json.length < 2) {
+    document.getElementById("status").textContent = "Fichier vide ou illisible.";
+    return;
+  }
+
+  const headers = json[0];
+  const { tCol, aCol, pCol } = detectColumns(headers);
+
+  if (tCol === -1 || aCol === -1) {
+    document.getElementById("status").textContent =
+      "⚠️ Colonnes ASIN ou Tracking non détectées automatiquement. Vérifiez les en-têtes du fichier.";
+    return;
+  }
+
+  rows = json.slice(1).map(r => ({
+    trackingNorm: normalize(r[tCol]),
+    trackingRaw: r[tCol],
+    asin: r[aCol],
+    productName: pCol !== -1 ? r[pCol] : "",
+  })).filter(r => r.trackingRaw);
+
+  const pColLabel = pCol !== -1 ? `, colonne Produit: "<strong>${headers[pCol]}</strong>"` : ' — ⚠️ colonne "Product Name" non trouvée';
+  const restoredText = restored ? " — 💾 restauré automatiquement" : "";
+  const fileText = fileName ? ` <span style="color:#555;">(${escapeHtml(fileName)})</span>` : "";
+  document.getElementById("status").innerHTML =
+    `✅ ${rows.length} lignes chargées${fileText}. Colonne suivi: "<strong>${headers[tCol]}</strong>", colonne ASIN: "<strong>${headers[aCol]}</strong>"${pColLabel}.${restoredText}`;
+  document.getElementById("scanInput").value = "";
+  searchByProductTitle(document.getElementById("productTitleSearch").value);
+}
+
+async function handleFile(file, shouldSave = true) {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    processPrimaryFileData(arrayBuffer, file.name, false);
+    if (shouldSave) await saveFileLocally("orderHistory", file, arrayBuffer);
+    document.getElementById("scanInput").focus();
+  } catch (err) {
+    document.getElementById("status").textContent = "❌ Impossible de lire le fichier : " + err;
+  }
+}
+
+document.getElementById("fileInput").addEventListener("change", function(e) {
+  if (e.target.files.length > 0) handleFile(e.target.files[0]);
+});
+
+document.getElementById("fileInput2").addEventListener("change", function(e) {
+  if (e.target.files.length > 0) handleSecondFile(e.target.files[0]);
+});
+
+function normalizeSearchText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function searchByProductTitle(value) {
+  const resultDiv = document.getElementById("productSearchResult");
+  const query = normalizeSearchText(value);
+
+  if (!query) {
+    resultDiv.innerHTML = "";
+    return;
+  }
+
+  if (rows.length === 0) {
+    resultDiv.innerHTML = '<div class="empty">Chargez d\'abord le fichier Excel fusionné.</div>';
+    return;
+  }
+
+  const terms = query.split(/\s+/).filter(Boolean);
+  const matches = rows.filter(row => {
+    const title = normalizeSearchText(row.productName);
+    return title && terms.every(term => title.includes(term));
+  });
+
+  if (matches.length === 0) {
+    resultDiv.innerHTML = '<div class="notfound">❌ Aucun titre de produit correspondant.</div>';
+    return;
+  }
+
+  const visibleMatches = matches.slice(0, 100);
+  let html = `<div class="found">✅ ${matches.length} résultat(s) trouvé(s) dans le titre du produit`;
+  if (matches.length > visibleMatches.length) html += ` — affichage des ${visibleMatches.length} premiers`;
+  html += `</div>`;
+  html += '<table><tr><th>ASIN</th><th>Titre du produit</th><th>N° de suivi</th><th>Action</th></tr>';
+
+  visibleMatches.forEach((row, index) => {
+    html += `<tr>
+      <td><strong>${escapeHtml(row.asin)}</strong></td>
+      <td>${escapeHtml(row.productName) || '<em>Non disponible</em>'}</td>
+      <td>${escapeHtml(row.trackingRaw)}</td>
+      <td><button class="barcode-btn product-search-generate" data-index="${index}">🏷️ Générer</button></td>
+    </tr>`;
+  });
+  html += '</table>';
+  resultDiv.innerHTML = html;
+
+  resultDiv.querySelectorAll(".product-search-generate").forEach(button => {
+    button.addEventListener("click", () => {
+      const row = visibleMatches[Number(button.dataset.index)];
+      if (!row) return;
+      document.getElementById("directAsinInput").value = row.asin;
+      document.getElementById("genDirectBarcode").click();
+      document.getElementById("directBarcodeResult").scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  });
+}
+
+let productSearchTimer;
+document.getElementById("productTitleSearch").addEventListener("input", function(e) {
+  clearTimeout(productSearchTimer);
+  productSearchTimer = setTimeout(() => searchByProductTitle(e.target.value), 150);
+});
+
+document.getElementById("productTitleSearch").addEventListener("keydown", function(e) {
+  if (e.key === "Enter") searchByProductTitle(e.target.value);
+});
+
+document.getElementById("clearProductSearch").addEventListener("click", function() {
+  document.getElementById("productTitleSearch").value = "";
+  document.getElementById("productSearchResult").innerHTML = "";
+  document.getElementById("productTitleSearch").focus();
+});
+
+function processSecondFileData(arrayBuffer, fileName = "", restored = false) {
+  const data = new Uint8Array(arrayBuffer);
+  const workbook = XLSX.read(data, { type: "array" });
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  const json = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+
+  if (json.length < 1) {
+    document.getElementById("status2").textContent = "2e fichier vide ou illisible.";
+    return;
+  }
+
+  secondRows = json.slice(1).map(r => {
+    const asinRaw = String(r[0] || "");
+    const tokens = (asinRaw.toUpperCase().match(/[A-Z0-9]{8,20}/g) || []).map(t => normalize(t));
+    return {
+      asinNorm: normalize(r[0]),
+      asinRaw,
+      asinTokens: tokens,
+      barcodeValue: String(r[1] || "").trim()
+    };
+  }).filter(r => r.asinRaw && r.barcodeValue);
+
+  const restoredText = restored ? " — 💾 restauré automatiquement" : "";
+  const fileText = fileName ? ` <span style="color:#555;">(${escapeHtml(fileName)})</span>` : "";
+  document.getElementById("status2").innerHTML = `✅ ${secondRows.length} lignes chargées${fileText} dans le 2e fichier. Colonne A = texte contenant l'ASIN, colonne B = code-barres.${restoredText}`;
+}
+
+async function handleSecondFile(file, shouldSave = true) {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    processSecondFileData(arrayBuffer, file.name, false);
+    if (shouldSave) await saveFileLocally("correspondence", file, arrayBuffer);
+  } catch (err) {
+    document.getElementById("status2").textContent = "❌ Impossible de lire le 2e fichier : " + err;
+  }
+}
+
+
+async function restoreSavedFiles() {
+  const [primary, secondary] = await Promise.all([
+    getSavedFile("orderHistory"),
+    getSavedFile("correspondence")
+  ]);
+
+  if (primary && primary.data) {
+    try {
+      processPrimaryFileData(primary.data, primary.name || "fichier mémorisé", true);
+    } catch (err) {
+      document.getElementById("status").textContent = "⚠️ Fichier mémorisé trouvé mais impossible à restaurer.";
+    }
+  }
+
+  if (secondary && secondary.data) {
+    try {
+      processSecondFileData(secondary.data, secondary.name || "2e fichier mémorisé", true);
+    } catch (err) {
+      document.getElementById("status2").textContent = "⚠️ 2e fichier mémorisé trouvé mais impossible à restaurer.";
+    }
+  }
+}
+
+
+const V20_REMOTE_MANIFEST = "./v20_data_version.json";
+const V20_REMOTE_DEFAULTS = {
+  amazon: "./Order_History_12_fichiers_fusionnes.xlsx",
+  cdiscount: "./ASIN_Code_Barre_Cdiscount.xlsx"
+};
+
+function setGithubSyncStatus(message, type = "info") {
+  const el = document.getElementById("githubSyncStatus");
+  if (!el) return;
+  el.innerHTML = message;
+  el.style.color = type === "ok" ? "#2e7d32" : type === "err" ? "#c62828" : "#555";
+}
+
+function remoteUrl(path) {
+  const p = String(path || "").trim();
+  if (!p) return "";
+  if (/^https?:\/\//i.test(p)) return p;
+  return p.startsWith("./") || p.startsWith("../") || p.startsWith("/") ? p : "./" + p;
+}
+
+async function fetchRemoteArrayBuffer(path) {
+  const url = remoteUrl(path);
+  if (!url) throw new Error("chemin distant vide");
+  const response = await fetch(url, { cache: "no-cache" });
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  return await response.arrayBuffer();
+}
+
+async function loadRemoteDataset(kind, meta, force = false) {
+  if (!meta || !meta.path) return { state: "absent" };
+  const shaKey = kind === "amazon" ? "v20RemoteAmazonSha" : "v20RemoteCdiscountSha";
+  const savedSha = (() => { try { return localStorage.getItem(shaKey) || ""; } catch (_) { return ""; } })();
+  if (!force && meta.sha256 && savedSha === meta.sha256) {
+    return { state: "current" };
+  }
+
+  const buffer = await fetchRemoteArrayBuffer(meta.path);
+  const fileName = String(meta.path).split("/").pop() || (kind === "amazon" ? "Order_History.xlsx" : "ASIN_Code_Barre_Cdiscount.xlsx");
+  const fakeFile = { name: fileName, type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", lastModified: Date.now() };
+
+  if (kind === "amazon") {
+    processPrimaryFileData(buffer, fileName, false);
+    await saveFileLocally("orderHistory", fakeFile, buffer);
+    const status = document.getElementById("status");
+    if (status) status.innerHTML += ' — ☁️ <strong>GitHub à jour</strong>';
+  } else {
+    processSecondFileData(buffer, fileName, false);
+    await saveFileLocally("correspondence", fakeFile, buffer);
+    const status2 = document.getElementById("status2");
+    if (status2) status2.innerHTML += ' — ☁️ <strong>GitHub à jour</strong>';
+  }
+
+  if (meta.sha256) {
+    try { localStorage.setItem(shaKey, meta.sha256); } catch (_) {}
+  }
+  return { state: "updated" };
+}
+
+async function refreshGithubData(force = false) {
+  setGithubSyncStatus("☁️ Vérification des données GitHub…");
+  let manifest = null;
+  try {
+    const response = await fetch(V20_REMOTE_MANIFEST, { cache: "no-cache" });
+    if (response.ok) manifest = await response.json();
+  } catch (_) {}
+
+  // Premier déploiement / ancien dépôt : essaie les chemins fixes si le manifeste n'existe pas.
+  if (!manifest) {
+    manifest = {
+      generated_at: null,
+      amazon: { path: V20_REMOTE_DEFAULTS.amazon },
+      cdiscount: { path: V20_REMOTE_DEFAULTS.cdiscount }
+    };
+  }
+
+  const results = {};
+  for (const kind of ["amazon", "cdiscount"]) {
+    try {
+      results[kind] = await loadRemoteDataset(kind, manifest[kind], force);
+    } catch (err) {
+      results[kind] = { state: "error", error: String(err) };
+    }
+  }
+
+  const amazonReady = rows.length > 0;
+  const cdiscountReady = secondRows.length > 0;
+  const updated = [results.amazon, results.cdiscount].filter(x => x && x.state === "updated").length;
+  const stamp = manifest.generated_at ? ` — serveur ${escapeHtml(manifest.generated_at.replace("T", " "))}` : "";
+
+  if (amazonReady && cdiscountReady) {
+    setGithubSyncStatus(`✅ Scanner prêt — Amazon <strong>${rows.length}</strong> ligne(s), Cdiscount <strong>${secondRows.length}</strong> ligne(s)${updated ? ` — ${updated} fichier(s) actualisé(s)` : " — déjà à jour"}${stamp}`, "ok");
+  } else if (amazonReady || cdiscountReady) {
+    setGithubSyncStatus(`⚠️ Données partielles — Amazon ${amazonReady ? "OK" : "manquant"}, Cdiscount ${cdiscountReady ? "OK" : "manquant"}. La dernière copie locale disponible est conservée.`, "err");
+  } else {
+    const offline = !navigator.onLine ? " (hors connexion)" : "";
+    setGithubSyncStatus(`❌ Impossible de charger les données GitHub et aucune copie locale n'est disponible${offline}.`, "err");
+  }
+}
+
+
+function findSecondMatchByAsin(asin) {
+  const asinNorm = normalize(asin);
+  if (!asinNorm) return null;
+
+  const extractAsinLikeTokens = (text) => {
+    const raw = String(text || '').toUpperCase();
+    const tokens = raw.match(/[A-Z0-9]{10}/g) || [];
+    return tokens.map(t => normalize(t));
+  };
+
+  const exact = secondRows.find(x => x.asinNorm === asinNorm);
+  if (exact) return exact;
+
+  const tokenizedExact = secondRows.find(x => extractAsinLikeTokens(x.asinRaw).includes(asinNorm));
+  if (tokenizedExact) return tokenizedExact;
+
+  const contains = secondRows.find(x => x.asinNorm.includes(asinNorm));
+  if (contains) return contains;
+
+  return null;
+}
+
+function search(value) {
+  const resultDiv = document.getElementById("result");
+  const countDiv = document.getElementById("count");
+  if (!value) {
+    resultDiv.innerHTML = "";
+    countDiv.textContent = "";
+    return;
+  }
+  if (rows.length === 0) {
+    resultDiv.innerHTML = '<div class="empty">Chargez d\'abord un fichier ci-dessus.</div>';
+    return;
+  }
+
+  const target = normalize(value);
+  const matches = rows.filter(r => r.trackingNorm === target || r.trackingNorm.includes(target) || target.includes(r.trackingNorm)).map(r => {
+    const second = findSecondMatchByAsin(r.asin);
+    return {
+      ...r,
+      pdfBarcodeValue: second && second.barcodeValue ? second.barcodeValue : r.asin,
+      matchedSecondAsinRaw: second ? second.asinRaw : '',
+      usedFallbackAsin: !(second && second.barcodeValue)
+    };
+  });
+
+  if (matches.length === 0) {
+    resultDiv.innerHTML = '<div class="notfound">❌ Aucun ASIN trouvé pour ce numéro de suivi.</div>';
+    countDiv.textContent = "";
+    return;
+  }
+
+  countDiv.innerHTML = `<span class="found">✅ ${matches.length} article(s) trouvé(s) pour ce colis (scan: ${value})</span>`;
+
+  const labelSize = getSelectedLabelSize();
+  let html = '<div style="margin-bottom:10px; display:flex; gap:8px; flex-wrap:wrap;">'
+    + '<button class="btn m110-print-btn" id="printM110Btn" data-count="' + matches.length + '">🖨️ Imprimer sur M110 (' + matches.length + ' étiquette(s)) — ' + labelSize.width + '×' + labelSize.height + ' mm</button>'
+    + '<button class="btn" id="downloadPdfBtn">📄 Télécharger le PDF (' + matches.length + ' code(s)-barres)</button>'
+    + '</div>';
+  html += '<table><tr><th>ASIN</th><th>Nom du produit</th><th>N° de suivi</th><th>Valeur encodée</th><th>Action</th></tr>';
+  matches.forEach((m, index) => {
+    html += `<tr>
+      <td><strong>${escapeHtml(m.asin)}</strong></td>
+      <td>${escapeHtml(m.productName) || '<em>Non disponible</em>'}</td>
+      <td>${escapeHtml(m.trackingRaw)}</td>
+      <td><strong>${escapeHtml(m.pdfBarcodeValue)}</strong></td>
+      <td><button class="barcode-btn m110-print-one" data-index="${index}">🖨️ Imprimer</button></td>
+    </tr>`;
+  });
+  html += '</table>';
+  resultDiv.innerHTML = html;
+
+  document.getElementById("printM110Btn").addEventListener("click", () => manualPrintM110(matches, value));
+  resultDiv.querySelectorAll('.m110-print-one').forEach(button => {
+    button.addEventListener('click', () => {
+      const m = matches[Number(button.dataset.index)];
+      if (m) manualPrintM110([m], value);
+    });
+  });
+  document.getElementById("downloadPdfBtn").addEventListener("click", () => downloadBarcodesPdf(matches, value));
+
+  const autoDl = document.getElementById("autoDownload");
+  if (autoDl && autoDl.checked) {
+    downloadBarcodesPdf(matches, value);
+  }
+
+  // Seulement 1 produit => impression automatique si l'option est active.
+  // Plusieurs produits => aucun départ automatique.
+  maybeAutoPrintSingle(matches, value);
+}
+
+let debounceTimer;
+document.getElementById("scanInput").addEventListener("input", function(e) {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => search(e.target.value), 150);
+});
+document.getElementById("scanInput").addEventListener("keydown", function(e) {
+  if (e.key === "Enter") search(e.target.value);
+});
+
+// Onglets Manuel / Caméra
+const tabManual = document.getElementById("tabManual");
+const tabCamera = document.getElementById("tabCamera");
+const manualZone = document.getElementById("manualZone");
+const cameraZone = document.getElementById("cameraZone");
+
+tabManual.addEventListener("click", () => {
+  tabManual.classList.add("active");
+  tabCamera.classList.remove("active");
+  manualZone.style.display = "block";
+  cameraZone.style.display = "none";
+  stopScanner();
+});
+tabCamera.addEventListener("click", () => {
+  tabCamera.classList.add("active");
+  tabManual.classList.remove("active");
+  cameraZone.style.display = "block";
+  manualZone.style.display = "none";
+});
+
+// Scanner caméra (html5-qrcode) — supporte codes-barres 1D (Code128, EAN) et QR.
+let html5QrCode = null;
+let lastScanValue = "";
+let lastScanTime = 0;
+let flashEnabled = false;
+
+document.getElementById("startCam").addEventListener("click", async () => {
+  const camStatus = document.getElementById("camStatus");
+  document.getElementById("cameraWrap").style.display = "block";
+  document.getElementById("startCam").style.display = "none";
+  document.getElementById("stopCam").style.display = "inline-block";
+  camStatus.textContent = "Initialisation de la caméra...";
+
+  html5QrCode = new Html5Qrcode("reader");
+  const config = {
+    fps: 10,
+    qrbox: { width: 280, height: 160 },
+    formatsToSupport: [
+      Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.CODE_39,
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.QR_CODE,
+      Html5QrcodeSupportedFormats.ITF,
+      Html5QrcodeSupportedFormats.UPC_A,
+    ]
+  };
+
+  try {
+    await html5QrCode.start(
+      { facingMode: "environment" },
+      config,
+      (decodedText) => {
+        const now = Date.now();
+        if (decodedText === lastScanValue && now - lastScanTime < 2000) return;
+        lastScanValue = decodedText;
+        lastScanTime = now;
+        camStatus.innerHTML = `📷 Code détecté: <strong>${decodedText}</strong>`;
+        search(decodedText);
+        if (navigator.vibrate) navigator.vibrate(150);
+      },
+      () => { /* ignore frames without a code */ }
+    );
+    camStatus.textContent = "Caméra active — visez le code-barres du colis.";
+
+    // Affiche le bouton du flash uniquement si la caméra arrière prend en charge la torche.
+    const flashBtn = document.getElementById("toggleFlash");
+    try {
+      const capabilities = html5QrCode.getRunningTrackCapabilities();
+      if (capabilities && capabilities.torch) {
+        flashBtn.style.display = "inline-block";
+      } else {
+        flashBtn.style.display = "none";
+      }
+    } catch (_) {
+      flashBtn.style.display = "none";
+    }
+  } catch (err) {
+    camStatus.textContent = "❌ Impossible d'accéder à la caméra : " + err;
+  }
+});
+
+document.getElementById("toggleFlash").addEventListener("click", async () => {
+  const flashBtn = document.getElementById("toggleFlash");
+  const camStatus = document.getElementById("camStatus");
+  if (!html5QrCode) return;
+
+  try {
+    const capabilities = html5QrCode.getRunningTrackCapabilities();
+    if (!capabilities || !capabilities.torch) {
+      flashBtn.style.display = "none";
+      camStatus.textContent = "⚠️ Le flash n'est pas pris en charge par cette caméra.";
+      return;
+    }
+
+    flashEnabled = !flashEnabled;
+    await html5QrCode.applyVideoConstraints({
+      advanced: [{ torch: flashEnabled }]
+    });
+    flashBtn.textContent = flashEnabled ? "🔦 Éteindre le flash" : "🔦 Allumer le flash";
+  } catch (err) {
+    flashEnabled = false;
+    flashBtn.textContent = "🔦 Allumer le flash";
+    camStatus.textContent = "⚠️ Impossible de modifier le flash sur cet appareil.";
+  }
+});
+
+document.getElementById("stopCam").addEventListener("click", stopScanner);
+
+document.getElementById("genDirectBarcode").addEventListener("click", () => {
+  const asin = document.getElementById("directAsinInput").value.trim();
+  const resultDiv = document.getElementById("directBarcodeResult");
+  if (!asin) { resultDiv.innerHTML = '<div class="notfound">Entrez un ASIN.</div>'; return; }
+
+  let title = "";
+  const match = rows.find(r => String(r.asin).toUpperCase() === asin.toUpperCase());
+  if (match) title = match.productName || "";
+
+  const second = findSecondMatchByAsin(asin);
+  const barcodeValue = second && second.barcodeValue ? second.barcodeValue : asin;
+  const canvas = generateBarcodeWithLabel(barcodeValue, title, asin);
+  resultDiv.innerHTML = "";
+  canvas.style.border = "1px solid #ddd";
+  canvas.style.borderRadius = "6px";
+  resultDiv.appendChild(canvas);
+
+  const dlBtn = document.createElement('button');
+  dlBtn.className = 'barcode-btn';
+  dlBtn.style.marginTop = '10px';
+  dlBtn.style.display = 'block';
+  dlBtn.textContent = '⬇️ Télécharger cette étiquette';
+  dlBtn.onclick = () => {
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `barcode_${asin}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+  };
+  resultDiv.appendChild(dlBtn);
+
+  const printBtn = document.createElement('button');
+  printBtn.className = 'barcode-btn m110-print-one';
+  printBtn.style.marginTop = '10px';
+  printBtn.style.marginLeft = '8px';
+  printBtn.textContent = '🖨️ Imprimer sur M110';
+  printBtn.onclick = () => manualPrintM110([{
+    asin,
+    pdfBarcodeValue: barcodeValue,
+    productName: title
+  }], 'ASIN direct');
+  resultDiv.appendChild(printBtn);
+
+  if (!title) {
+    const note = document.createElement('div');
+    note.style.fontSize = '12px';
+    note.style.color = '#888';
+    note.style.marginTop = '6px';
+    note.textContent = "ℹ️ Titre non trouvé dans le fichier chargé pour cet ASIN (chargez le fichier pour l'inclure automatiquement).";
+    resultDiv.appendChild(note);
+  }
+});
+
+function generateBarcodeWithLabel(barcodeValue, title, displayAsin = "") {
+  const barcodeCanvas = document.createElement('canvas');
+  JsBarcode(barcodeCanvas, String(barcodeValue || ""), {
+    format: "CODE128",
+    displayValue: false,
+    margin: 10,
+    height: 60,
+    width: 2,
+  });
+
+  const padding = 12;
+  const titleFontSize = 14;
+  const asinFontSize = 16;
+  const metaFontSize = 18;
+  const maxWidth = Math.max(barcodeCanvas.width, 320);
+
+  const finalCanvas = document.createElement('canvas');
+  const ctx = finalCanvas.getContext('2d');
+  ctx.font = `bold ${titleFontSize}px Arial`;
+
+  function wrapText(text, maxW) {
+    const words = String(text || "").split(' ');
+    const lines = [];
+    let line = '';
+    words.forEach(word => {
+      const test = line ? line + ' ' + word : word;
+      if (ctx.measureText(test).width > maxW && line) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = test;
+      }
+    });
+    if (line) lines.push(line);
+    return lines;
+  }
+
+  const titleLines = wrapText(title, maxWidth - padding * 2);
+  const titleHeight = titleLines.length * (titleFontSize + 4);
+
+  finalCanvas.width = maxWidth + padding * 2;
+  finalCanvas.height = barcodeCanvas.height + asinFontSize + metaFontSize + titleHeight + padding * 5;
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
+
+  let y = padding;
+  const bx = (finalCanvas.width - barcodeCanvas.width) / 2;
+  ctx.drawImage(barcodeCanvas, bx, y);
+  y += barcodeCanvas.height + 6;
+
+  ctx.fillStyle = '#000000';
+  ctx.font = `bold ${asinFontSize}px Arial`;
+  ctx.textAlign = 'center';
+  ctx.fillText(displayAsin || String(barcodeValue || ''), finalCanvas.width / 2, y + asinFontSize);
+  y += asinFontSize + 6;
+
+  ctx.font = `bold ${metaFontSize}px Arial`;
+  ctx.fillStyle = '#000000';
+  ctx.fillText(String(barcodeValue || ''), finalCanvas.width / 2, y + metaFontSize);
+  y += metaFontSize + 8;
+
+  ctx.fillStyle = '#000000';
+  ctx.font = `${titleFontSize}px Arial`;
+  titleLines.forEach(line => {
+    ctx.fillText(line, finalCanvas.width / 2, y + titleFontSize);
+    y += titleFontSize + 4;
+  });
+
+  return finalCanvas;
+}
+
+function downloadBarcode(canvasId, asin, title) {
+  const second = findSecondMatchByAsin(asin);
+  const encodedValue = String((second && second.barcodeValue) ? second.barcodeValue : asin).trim();
+  const finalCanvas = generateBarcodeWithLabel(encodedValue, title, asin);
+  finalCanvas.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `barcode_${asin}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+}
+
+function downloadBarcodesPdf(matches, trackingValue) {
+  const { jsPDF } = window.jspdf;
+
+  // Format compact 100 × 70 mm : une seule étiquette par page.
+  const doc = new jsPDF({
+    orientation: "landscape",
+    unit: "mm",
+    format: [100, 70],
+    compress: true
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const sideMargin = 1.5; // Marge minimale d'impression : le code-barres occupe presque toute la largeur.
+  const barcodeWidth = pageWidth - sideMargin * 2;
+  const barcodeTop = 9;
+  const barcodeHeight = 27;
+
+  matches.forEach((m, idx) => {
+    if (idx > 0) doc.addPage([100, 70], "landscape");
+
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Colis - N° de suivi: ${trackingValue}`, sideMargin, 5.5);
+
+    const encodedValue = String(m.pdfBarcodeValue || m.asin || '').trim();
+
+    // Génère uniquement les barres, puis les étire sur presque toute la largeur du PDF.
+    const barcodeOnly = document.createElement('canvas');
+    JsBarcode(barcodeOnly, encodedValue, {
+      format: "CODE128",
+      displayValue: false,
+      margin: 8,
+      height: 90,
+      width: 3
+    });
+    const barcodeImg = barcodeOnly.toDataURL("image/png");
+    doc.addImage(barcodeImg, "PNG", sideMargin, barcodeTop, barcodeWidth, barcodeHeight, undefined, "FAST");
+
+    let y = barcodeTop + barcodeHeight + 6;
+
+    doc.setTextColor(0, 0, 0);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.text(String(m.asin || encodedValue), pageWidth / 2, y, { align: "center" });
+
+    y += 6;
+    doc.setFontSize(15);
+    doc.text(encodedValue, pageWidth / 2, y, { align: "center" });
+
+    y += 5;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    const title = String(m.productName || "").trim();
+    if (title) {
+      const titleLines = doc.splitTextToSize(title, pageWidth - 6);
+      doc.text(titleLines.slice(0, 3), pageWidth / 2, y, { align: "center", maxWidth: pageWidth - 6 });
+    }
+  });
+
+  doc.save(`colis_${trackingValue}_codes-barres.pdf`);
+}
+
+
+function stopScanner() {
+  if (html5QrCode) {
+    html5QrCode.stop().then(() => {
+      html5QrCode.clear();
+      html5QrCode = null;
+    }).catch(() => {});
+  }
+  flashEnabled = false;
+  const flashBtn = document.getElementById("toggleFlash");
+  flashBtn.style.display = "none";
+  flashBtn.textContent = "🔦 Allumer le flash";
+  document.getElementById("startCam").style.display = "inline-block";
+  document.getElementById("stopCam").style.display = "none";
+  document.getElementById("cameraWrap").style.display = "none";
+  document.getElementById("camStatus").textContent = "";
+}
+
+
+
+// =============================================================
+// MODE RANGEMENT — lecteur Bluetooth HID / clavier
+// Un scan produit => ASIN + caisse enregistrés immédiatement.
+// Les données sont conservées localement dans ce navigateur.
+// =============================================================
+const STORAGE_RECORDS_KEY = "vine-rangement-records-v1";
+const STORAGE_ACTIVE_BOX_KEY = "vine-rangement-active-box-v1";
+const STORAGE_MODE_KEY = "vine-work-mode-v1";
+
+let storageRecords = [];
+let storageScanTimer = null;
+let storageLastValue = "";
+let storageLastTime = 0;
+const STORAGE_DUPLICATE_WINDOW_MS = 2500;
+let storageAudioContext = null;
+
+function setWorkMode(mode) {
+  const opening = mode !== "storage";
+  document.getElementById("openingMode").style.display = opening ? "block" : "none";
+  document.getElementById("storageMode").style.display = opening ? "none" : "block";
+
+  const bo = document.getElementById("modeOpeningBtn");
+  const bs = document.getElementById("modeStorageBtn");
+  bo.classList.toggle("active", opening);
+  bs.classList.toggle("active", !opening);
+
+  try { localStorage.setItem(STORAGE_MODE_KEY, opening ? "opening" : "storage"); } catch (_) {}
+
+  if (!opening) {
+    try { stopScanner(); } catch (_) {}
+    setTimeout(() => {
+      const input = document.getElementById("storageScanInput");
+      if (input) input.focus({ preventScroll: true });
+    }, 80);
+  } else {
+    const input = document.getElementById("scanInput");
+    if (input) setTimeout(() => input.focus({ preventScroll: true }), 80);
+  }
+}
+
+function loadStorageRecords() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_RECORDS_KEY) || "[]");
+    storageRecords = Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    storageRecords = [];
+  }
+}
+
+function saveStorageRecords() {
+  try {
+    localStorage.setItem(STORAGE_RECORDS_KEY, JSON.stringify(storageRecords));
+  } catch (err) {
+    console.warn("Impossible de sauvegarder l'historique rangement :", err);
+  }
+}
+
+function setStorageStatus(message, type = "info") {
+  const el = document.getElementById("storageStatus");
+  if (!el) return;
+  el.className = "storage-status " + type;
+  el.innerHTML = message;
+}
+
+function getActiveStorageBox() {
+  const input = document.getElementById("storageBoxInput");
+  return String(input ? input.value : "").trim();
+}
+
+function setActiveStorageBox(value, announce = false) {
+  const box = String(value || "").trim();
+  if (!box) return false;
+  const input = document.getElementById("storageBoxInput");
+  const label = document.getElementById("storageCurrentBoxLabel");
+  if (input) input.value = box;
+  if (label) label.textContent = box;
+  try { localStorage.setItem(STORAGE_ACTIVE_BOX_KEY, box); } catch (_) {}
+  renderStorageState();
+  if (announce) {
+    setStorageStatus(`📦 Caisse active : <strong>${escapeHtml(box)}</strong>`, "info");
+    storageSignal("box");
+  }
+  return true;
+}
+
+function adjustStorageBox(delta) {
+  const current = getActiveStorageBox() || "CD-ZH 1";
+  const match = current.match(/^(.*?)(\d+)\s*$/);
+  if (!match) {
+    setStorageStatus("⚠️ Le nom de la caisse ne se termine pas par un numéro. Modifie-le directement.", "err");
+    return;
+  }
+  const prefix = match[1];
+  const currentNumber = Number(match[2]);
+  const next = Math.max(1, currentNumber + delta);
+  setActiveStorageBox(prefix + next, true);
+  const scan = document.getElementById("storageScanInput");
+  if (scan) scan.focus({ preventScroll: true });
+}
+
+function candidateAsinsFromText(text) {
+  const raw = String(text || "").toUpperCase();
+  const tokens = raw.match(/[A-Z0-9]{10}/g) || [];
+  return Array.from(new Set(tokens));
+}
+
+function resolveStorageProduct(scannedValue) {
+  const raw = String(scannedValue || "").trim();
+  const norm = normalize(raw);
+  if (!norm) return null;
+
+  // 1) Le code scanné est directement l'ASIN.
+  let row = rows.find(r => normalize(r.asin) === norm);
+  if (row) {
+    const second = findSecondMatchByAsin(row.asin);
+    return {
+      asin: String(row.asin || "").trim(),
+      productName: String(row.productName || "").trim(),
+      labelBarcode: String(second && second.barcodeValue ? second.barcodeValue : row.asin).trim(),
+      scannedCode: raw
+    };
+  }
+
+  // 2) Le code scanné est la valeur Code128 imprimée sur l'étiquette M110 (2e fichier).
+  const second = secondRows.find(s => normalize(s.barcodeValue) === norm);
+  if (second) {
+    const candidates = candidateAsinsFromText(second.asinRaw);
+    for (const candidate of candidates) {
+      row = rows.find(r => normalize(r.asin) === normalize(candidate));
+      if (row) break;
+    }
+
+    let asin = row ? String(row.asin || "").trim() : "";
+    if (!asin && candidates.length) asin = candidates[0];
+    if (!asin) asin = String(second.asinRaw || "").trim();
+
+    return {
+      asin,
+      productName: row ? String(row.productName || "").trim() : "",
+      labelBarcode: String(second.barcodeValue || "").trim(),
+      scannedCode: raw
+    };
+  }
+
+  // 3) Si le code contient lui-même un ASIN de 10 caractères.
+  const embedded = candidateAsinsFromText(raw);
+  for (const candidate of embedded) {
+    row = rows.find(r => normalize(r.asin) === normalize(candidate));
+    if (row) {
+      const secondMatch = findSecondMatchByAsin(row.asin);
+      return {
+        asin: String(row.asin || "").trim(),
+        productName: String(row.productName || "").trim(),
+        labelBarcode: String(secondMatch && secondMatch.barcodeValue ? secondMatch.barcodeValue : row.asin).trim(),
+        scannedCode: raw
+      };
+    }
+  }
+
+  return null;
+}
+
+function getStorageAudioContext() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return null;
+    if (!storageAudioContext || storageAudioContext.state === "closed") storageAudioContext = new AudioCtx();
+    if (storageAudioContext.state === "suspended") storageAudioContext.resume().catch(() => {});
+    return storageAudioContext;
+  } catch (_) {
+    return null;
+  }
+}
+
+function storageTone(freq, startOffset, duration, volume = 0.075) {
+  const ctx = getStorageAudioContext();
+  if (!ctx) return;
+  try {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const start = ctx.currentTime + startOffset;
+    const stop = start + duration;
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(freq, start);
+    gain.gain.setValueAtTime(volume, start);
+    gain.gain.exponentialRampToValueAtTime(0.001, stop);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(start);
+    osc.stop(stop);
+  } catch (_) {}
+}
+
+function storageSignal(kind = "ok") {
+  // Des signaux volontairement très différents pour pouvoir ranger sans regarder l'écran.
+  if (kind === "ok") {
+    storageTone(1150, 0, 0.08);
+    if (navigator.vibrate) navigator.vibrate(65);
+    return;
+  }
+  if (kind === "box") {
+    storageTone(900, 0, 0.07);
+    storageTone(1350, 0.11, 0.08);
+    if (navigator.vibrate) navigator.vibrate([45, 35, 45]);
+    return;
+  }
+  if (kind === "duplicate") {
+    storageTone(300, 0, 0.13, 0.09);
+    storageTone(300, 0.20, 0.13, 0.09);
+    if (navigator.vibrate) navigator.vibrate([180, 90, 180]);
+    return;
+  }
+  // erreur / code inconnu
+  storageTone(190, 0, 0.20, 0.10);
+  storageTone(150, 0.24, 0.22, 0.10);
+  if (navigator.vibrate) navigator.vibrate([260, 100, 260, 100, 260]);
+}
+
+// Compatibilité avec les appels historiques.
+function storageBeep(ok = true) {
+  storageSignal(ok ? "ok" : "error");
+}
+
+function storageRecordTime(record) {
+  const d = new Date(record.timestamp);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function renderStorageState() {
+  const activeBox = getActiveStorageBox();
+  const boxCount = storageRecords.filter(r => r.box === activeBox).length;
+  const bc = document.getElementById("storageBoxCount");
+  const tc = document.getElementById("storageTotalCount");
+  if (bc) bc.textContent = String(boxCount);
+  if (tc) tc.textContent = String(storageRecords.length);
+
+  const history = document.getElementById("storageHistoryList");
+  if (!history) return;
+
+  const recent = storageRecords.slice(-12).reverse();
+  if (!recent.length) {
+    history.innerHTML = '<div class="empty" style="margin-top:8px;">Aucun produit rangé pour le moment.</div>';
+    return;
+  }
+
+  history.innerHTML = recent.map(r => `
+    <div class="storage-history-item">
+      <div class="storage-history-time">${escapeHtml(storageRecordTime(r))}</div>
+      <div class="storage-history-main">
+        <strong>${escapeHtml(r.asin || r.scannedCode)}</strong>
+        ${r.productName ? `<div style="color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:430px;">${escapeHtml(r.productName)}</div>` : ""}
+      </div>
+      <div class="storage-history-box">${escapeHtml(r.box)}</div>
+    </div>
+  `).join("");
+}
+
+function handleStorageScan(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return;
+
+  // Anti-doublon rapide : si le lecteur renvoie deux fois le même code ou si le
+  // même produit est rescanné accidentellement dans les 2,5 s, le 2e scan est ignoré.
+  // Au-delà, le même ASIN reste autorisé pour gérer plusieurs exemplaires physiques.
+  const now = Date.now();
+  if (raw === storageLastValue && now - storageLastTime < STORAGE_DUPLICATE_WINDOW_MS) {
+    setStorageStatus(`⚠️ Doublon ignoré : <strong>${escapeHtml(raw)}</strong>`, "err");
+    storageSignal("duplicate");
+    storageLastTime = now;
+    return;
+  }
+  storageLastValue = raw;
+  storageLastTime = now;
+
+  // Une étiquette de caisse peut servir à changer de caisse sans toucher l'écran.
+  const boxMatch = raw.match(/^(?:BOX|CAISSE)\s*[:|]\s*(.+)$/i);
+  if (boxMatch) {
+    setActiveStorageBox(boxMatch[1], true);
+    return;
+  }
+
+  const activeBox = getActiveStorageBox();
+  if (!activeBox) {
+    setStorageStatus("❌ Choisis d'abord une caisse.", "err");
+    storageSignal("error");
+    return;
+  }
+
+  const product = resolveStorageProduct(raw);
+  if (!product) {
+    setStorageStatus(`❌ Code non reconnu : <strong>${escapeHtml(raw)}</strong><br><span style="font-weight:normal;">Vérifie que les fichiers Excel sont chargés et que le code correspond à l'ASIN ou au code imprimé sur la M110.</span>`, "err");
+    storageSignal("error");
+    return;
+  }
+
+  const record = {
+    id: String(Date.now()) + "-" + Math.random().toString(36).slice(2, 8),
+    timestamp: new Date().toISOString(),
+    box: activeBox,
+    asin: product.asin,
+    scannedCode: product.scannedCode,
+    labelBarcode: product.labelBarcode,
+    productName: product.productName
+  };
+
+  storageRecords.push(record);
+  saveStorageRecords();
+  renderStorageState();
+
+  setStorageStatus(
+    `✅ <strong>${escapeHtml(product.asin)}</strong> → <strong>${escapeHtml(activeBox)}</strong>` +
+    (product.productName ? `<br><span style="font-weight:normal;">${escapeHtml(product.productName)}</span>` : ""),
+    "ok"
+  );
+  storageSignal("ok");
+}
+
+function processStorageInputNow() {
+  const input = document.getElementById("storageScanInput");
+  if (!input) return;
+  const value = input.value.trim();
+  if (!value) return;
+  input.value = "";
+  handleStorageScan(value);
+  setTimeout(() => input.focus({ preventScroll: true }), 20);
+}
+
+function undoLastStorageScan() {
+  if (!storageRecords.length) {
+    setStorageStatus("Aucun scan à annuler.", "info");
+    return;
+  }
+  const removed = storageRecords.pop();
+  saveStorageRecords();
+  renderStorageState();
+  setStorageStatus(`↩️ Annulé : <strong>${escapeHtml(removed.asin || removed.scannedCode)}</strong> retiré de <strong>${escapeHtml(removed.box)}</strong>.`, "info");
+  const input = document.getElementById("storageScanInput");
+  if (input) input.focus({ preventScroll: true });
+}
+
+function exportStorageExcel() {
+  if (!storageRecords.length) {
+    setStorageStatus("⚠️ Aucun rangement à exporter.", "err");
+    return;
+  }
+  const exportRows = storageRecords.map((r, index) => {
+    const d = new Date(r.timestamp);
+    return {
+      "N°": index + 1,
+      "Date": Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("fr-FR"),
+      "Heure": Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString("fr-FR"),
+      "Caisse": r.box,
+      "ASIN": r.asin,
+      "Code scanné": r.scannedCode,
+      "Code étiquette": r.labelBarcode,
+      "Produit": r.productName
+    };
+  });
+
+  try {
+    if (window.XLSX && XLSX.utils && XLSX.writeFile) {
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(exportRows);
+      ws["!cols"] = [
+        { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 18 },
+        { wch: 16 }, { wch: 20 }, { wch: 20 }, { wch: 55 }
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, "Rangement");
+      const date = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(wb, `Rangement_Vine_${date}.xlsx`);
+      setStorageStatus(`📥 Export Excel créé : <strong>${storageRecords.length}</strong> ligne(s).`, "ok");
+      return;
+    }
+  } catch (err) {
+    console.warn("Export XLSX impossible, bascule CSV :", err);
+  }
+
+  const headers = Object.keys(exportRows[0]);
+  const esc = v => '"' + String(v ?? "").replace(/"/g, '""') + '"';
+  const csv = "\uFEFF" + headers.map(esc).join(";") + "\n" +
+    exportRows.map(r => headers.map(h => esc(r[h])).join(";")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `Rangement_Vine_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  setStorageStatus(`📥 Export CSV créé : <strong>${storageRecords.length}</strong> ligne(s).`, "ok");
+}
+
+function lookupStorageProduct() {
+  const input = document.getElementById("storageLookupInput");
+  const out = document.getElementById("storageLookupResult");
+  const raw = String(input ? input.value : "").trim();
+  if (!out) return;
+  if (!raw) {
+    out.innerHTML = "";
+    return;
+  }
+
+  const product = resolveStorageProduct(raw);
+  const targetAsin = product ? normalize(product.asin) : normalize(raw);
+  const found = storageRecords.filter(r =>
+    normalize(r.asin) === targetAsin ||
+    normalize(r.scannedCode) === normalize(raw) ||
+    normalize(r.labelBarcode) === normalize(raw)
+  );
+
+  if (!found.length) {
+    out.innerHTML = `<div class="notfound">❌ Aucun emplacement enregistré pour ${escapeHtml(raw)}.</div>`;
+    return;
+  }
+
+  const boxes = [...new Set(found.map(r => r.box))];
+  const asin = found[found.length - 1].asin || raw;
+  out.innerHTML = `<div class="found">✅ <strong>${escapeHtml(asin)}</strong> : ${found.length} exemplaire(s) → ${boxes.map(b => `<span class="storage-history-box">${escapeHtml(b)}</span>`).join(" ")}</div>`;
+}
+
+function generateStorageBoxLabelCanvas(boxName) {
+  const box = String(boxName || "").trim();
+  const size = getSelectedLabelSize();
+  const W = Math.min(M110_HEAD_DOTS, mmToDots(size.printableWidth));
+  const H = mmToDots(size.height);
+  const c = document.createElement("canvas");
+  c.width = W;
+  c.height = H;
+  const ctx = c.getContext("2d");
+
+  // Fond blanc / noir franc pour une lecture rapide par la douchette 1D/2D.
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "#000";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.imageSmoothingEnabled = false;
+
+  const side = Math.max(8, Math.round(W * 0.025));
+  const topPad = Math.max(4, Math.round(H * 0.025));
+
+  // 1) Nom de caisse volontairement très grand : lisible à distance sur la pile.
+  let titlePx = Math.max(26, Math.round(H * 0.22));
+  ctx.font = `900 ${titlePx}px Arial`;
+  while (titlePx > 18 && ctx.measureText(box).width > W - side * 2) {
+    titlePx -= 1;
+    ctx.font = `900 ${titlePx}px Arial`;
+  }
+  const titleY = topPad + Math.round(titlePx * 0.60);
+  ctx.fillText(box, W / 2, titleY);
+
+  // 2) Code128 large et surtout haut. On garde une vraie zone blanche autour du code.
+  //    Valeur préfixée pour distinguer sans ambiguïté une caisse d'un produit.
+  const codeValue = "BOX:" + box;
+  const barcode = document.createElement("canvas");
+  const barcodeTop = Math.max(titleY + Math.round(titlePx * 0.60), Math.round(H * 0.30));
+  const bottomTextSpace = Math.max(24, Math.round(H * 0.13));
+  const availableBarcodeH = Math.max(45, H - barcodeTop - bottomTextSpace - topPad);
+
+  // Modules de 2 dots quand ça tient : évite des barres trop fines sur la M110 203 dpi.
+  JsBarcode(barcode, codeValue, {
+    format: "CODE128",
+    displayValue: false,
+    margin: 0,
+    height: availableBarcodeH,
+    width: 2
+  });
+
+  const maxBarcodeW = W - side * 2;
+  let dw = barcode.width;
+  let dh = barcode.height;
+
+  // Ne jamais étirer horizontalement : on préserve la largeur relative des modules.
+  // Si nécessaire, réduction proportionnelle uniquement.
+  if (dw > maxBarcodeW) {
+    const scale = maxBarcodeW / dw;
+    dw = Math.max(1, Math.floor(dw * scale));
+    dh = Math.max(1, Math.floor(dh * scale));
+  }
+  if (dh > availableBarcodeH) {
+    const scale = availableBarcodeH / dh;
+    dw = Math.max(1, Math.floor(dw * scale));
+    dh = Math.max(1, Math.floor(dh * scale));
+  }
+
+  const barcodeY = barcodeTop + Math.max(0, Math.floor((availableBarcodeH - dh) / 2));
+  ctx.drawImage(barcode, Math.round((W - dw) / 2), barcodeY, dw, dh);
+
+  // 3) Valeur humaine compacte en bas, utile si le code est abîmé.
+  let footerPx = Math.max(12, Math.round(H * 0.065));
+  ctx.font = `bold ${footerPx}px Arial`;
+  while (footerPx > 10 && ctx.measureText(codeValue).width > W - side * 2) {
+    footerPx -= 1;
+    ctx.font = `bold ${footerPx}px Arial`;
+  }
+  ctx.fillText(codeValue, W / 2, H - Math.max(8, Math.round(footerPx * 0.65)));
+  return c;
+}
+
+function printStorageBoxLabel() {
+  const box = getActiveStorageBox();
+  if (!box) {
+    setStorageStatus("❌ Indique une caisse avant d'imprimer son étiquette.", "err");
+    return;
+  }
+  if (!isM110Connected()) {
+    setStorageStatus("❌ Connecte d'abord la M110 dans le mode Ouverture.", "err");
+    return;
+  }
+
+  const density = Number(document.getElementById("m110Density").value || 6);
+  const canvas = generateStorageBoxLabelCanvas(box);
+  const raster = m110CanvasToRaster(canvas);
+
+  m110PrintQueue = m110PrintQueue.then(async () => {
+    try {
+      setStorageStatus(`🖨️ Impression de l'étiquette <strong>${escapeHtml(box)}</strong>…`, "info");
+      await printRasterM110(raster, density);
+      setStorageStatus(`✅ Étiquette caisse <strong>${escapeHtml(box)}</strong> imprimée.`, "ok");
+      storageSignal("ok");
+    } catch (err) {
+      setStorageStatus("❌ Erreur d'impression : " + escapeHtml(err.message || err), "err");
+    }
+  });
+}
+
+function nextStorageBoxName(current) {
+  const value = String(current || "").trim() || "CD-ZH 1";
+  const match = value.match(/^(.*?)(\d+)\s*$/);
+  if (!match) return null;
+  return match[1] + (Number(match[2]) + 1);
+}
+
+async function advanceStorageBoxAndPrint() {
+  const current = getActiveStorageBox();
+  const next = nextStorageBoxName(current);
+  if (!next) {
+    setStorageStatus("⚠️ Impossible de calculer la caisse suivante : le nom doit se terminer par un numéro.", "err");
+    storageSignal("error");
+    return;
+  }
+
+  setActiveStorageBox(next, true);
+
+  // La caisse change même si l'imprimante n'est pas connectée ; l'utilisateur peut alors
+  // imprimer plus tard avec le bouton normal sans perdre son flux de rangement.
+  if (!isM110Connected()) {
+    setStorageStatus(`📦 <strong>${escapeHtml(next)}</strong> active. ⚠️ M110 non connectée : étiquette non imprimée.`, "info");
+    const scan = document.getElementById("storageScanInput");
+    if (scan) scan.focus({ preventScroll: true });
+    return;
+  }
+
+  printStorageBoxLabel();
+  const scan = document.getElementById("storageScanInput");
+  if (scan) scan.focus({ preventScroll: true });
+}
+
+function initStorageMode() {
+  loadStorageRecords();
+
+  let savedBox = "";
+  try { savedBox = localStorage.getItem(STORAGE_ACTIVE_BOX_KEY) || ""; } catch (_) {}
+  setActiveStorageBox(savedBox || "CD-ZH 12", false);
+  renderStorageState();
+
+  document.getElementById("modeOpeningBtn").addEventListener("click", () => setWorkMode("opening"));
+  document.getElementById("modeStorageBtn").addEventListener("click", () => setWorkMode("storage"));
+
+  const boxInput = document.getElementById("storageBoxInput");
+  boxInput.addEventListener("change", () => setActiveStorageBox(boxInput.value, true));
+  boxInput.addEventListener("keydown", e => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      setActiveStorageBox(boxInput.value, true);
+      document.getElementById("storageScanInput").focus({ preventScroll: true });
+    }
+  });
+
+  document.getElementById("storagePrevBox").addEventListener("click", () => adjustStorageBox(-1));
+  document.getElementById("storageNextBox").addEventListener("click", () => adjustStorageBox(1));
+  document.getElementById("storagePrintBoxLabel").addEventListener("click", printStorageBoxLabel);
+  document.getElementById("storageNextAndPrintBox").addEventListener("click", advanceStorageBoxAndPrint);
+
+  const scanInput = document.getElementById("storageScanInput");
+  scanInput.addEventListener("input", () => {
+    clearTimeout(storageScanTimer);
+    storageScanTimer = setTimeout(processStorageInputNow, 220);
+  });
+  scanInput.addEventListener("keydown", e => {
+    // Le premier caractère du lecteur sert aussi de geste utilisateur pour autoriser le son dans Chrome Android.
+    getStorageAudioContext();
+    if (e.key === "Enter" || e.key === "Tab") {
+      e.preventDefault();
+      clearTimeout(storageScanTimer);
+      processStorageInputNow();
+    }
+  });
+  scanInput.addEventListener("blur", () => {
+    // Si le lecteur Bluetooth tape pendant que l'écran a perdu le focus,
+    // on rend le champ actif dès que possible, sans ouvrir le clavier virtuel.
+    const mode = document.getElementById("storageMode").style.display !== "none";
+    if (mode) setTimeout(() => scanInput.focus({ preventScroll: true }), 120);
+  });
+
+  // Filet de sécurité HID : si le focus a malgré tout quitté le champ principal,
+  // les caractères du lecteur sont redirigés vers lui (hors champs de saisie volontaire).
+  document.addEventListener("keydown", e => {
+    const mode = document.getElementById("storageMode").style.display !== "none";
+    if (!mode) return;
+    const active = document.activeElement;
+    const deliberateField = active === boxInput || active === document.getElementById("storageLookupInput");
+    if (deliberateField || active === scanInput) return;
+
+    if (e.key === "Enter" || e.key === "Tab") {
+      e.preventDefault();
+      scanInput.focus({ preventScroll: true });
+      clearTimeout(storageScanTimer);
+      processStorageInputNow();
+      return;
+    }
+    if (e.key && e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      e.preventDefault();
+      scanInput.focus({ preventScroll: true });
+      scanInput.value += e.key;
+      clearTimeout(storageScanTimer);
+      storageScanTimer = setTimeout(processStorageInputNow, 220);
+    }
+  }, true);
+
+  document.getElementById("storageUndoBtn").addEventListener("click", undoLastStorageScan);
+  document.getElementById("storageExportBtn").addEventListener("click", exportStorageExcel);
+  document.getElementById("storageClearBtn").addEventListener("click", () => {
+    if (!storageRecords.length) return;
+    if (!confirm("Vider tout l'historique de rangement enregistré sur ce navigateur ?")) return;
+    storageRecords = [];
+    saveStorageRecords();
+    renderStorageState();
+    setStorageStatus("🗑️ Historique de rangement vidé.", "info");
+    scanInput.focus({ preventScroll: true });
+  });
+
+  document.getElementById("storageLookupBtn").addEventListener("click", lookupStorageProduct);
+  document.getElementById("storageLookupInput").addEventListener("keydown", e => {
+    if (e.key === "Enter") lookupStorageProduct();
+  });
+
+  let savedMode = "opening";
+  try { savedMode = localStorage.getItem(STORAGE_MODE_KEY) || "opening"; } catch (_) {}
+  setWorkMode(savedMode === "storage" ? "storage" : "opening");
+}
+
+// Restaure automatiquement les deux fichiers Excel mémorisés après une actualisation.
+window.addEventListener("DOMContentLoaded", async () => {
+  await restoreSavedFiles();
+  await refreshGithubData(false);
+  restoreLabelSizeUi();
+  restoreAutoPrintSingleUi();
+  updateM110Buttons();
+  initStorageMode();
+
+  document.getElementById('connectM110').addEventListener('click', () => connectM110(false));
+  document.getElementById('connectM110All').addEventListener('click', () => connectM110(true));
+  document.getElementById('disconnectM110').addEventListener('click', disconnectM110);
+  document.getElementById('labelSizePreset').addEventListener('change', updateLabelSizeUi);
+  document.getElementById('customLabelWidth').addEventListener('input', updateLabelSizeUi);
+  document.getElementById('customLabelHeight').addEventListener('input', updateLabelSizeUi);
+  document.getElementById('testM110').addEventListener('click', () => manualPrintM110([makeM110TestMatch()], 'TEST'));
+  document.getElementById('refreshGithubData').addEventListener('click', () => refreshGithubData(true));
+});
+
+// Mode hors ligne pour GitHub Pages / serveur HTTPS : le service worker met en cache
+// cette page et toutes les bibliothèques locales après la première ouverture en ligne.
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(err => {
+      console.warn("Service worker non disponible :", err);
+    });
+  });
+}
+</script>
+
+
+
+</body></html>
