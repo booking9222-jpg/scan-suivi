@@ -277,7 +277,7 @@
 </style>
 </head>
 <body>
-<!-- V13 : catalogue commun + photo facultative + sortie rapide -->
+<!-- V14 : catalogue commun + photo + sortie rapide + M110 accélérée -->
 
 <h1>📦 Vine : ouverture → M110 → rangement synchronisé</h1>
 
@@ -344,6 +344,25 @@
       </select>
     </label>
     <button class="btn printer-btn secondary" id="testM110">🧪 Imprimer une étiquette test</button>
+  </div>
+  <div style="margin-top:10px; padding:10px; border:1px solid #d7e8ff; border-radius:9px; background:#f7fbff;">
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <label style="font-size:13px; font-weight:bold;">🚀 Débit Bluetooth :
+        <select id="m110SpeedProfile" style="padding:7px; border:1px solid #bbb; border-radius:6px;">
+          <option value="turbo">⚡ Turbo — 4 ms</option>
+          <option value="fast" selected>🚀 Rapide — 8 ms</option>
+          <option value="normal">Normal — 12 ms</option>
+          <option value="safe">🛡️ Compatible — 20 ms</option>
+        </select>
+      </label>
+      <button class="btn printer-btn secondary" id="testM110Burst">🧪 Test 3 étiquettes</button>
+    </div>
+    <div id="m110SpeedHint" class="mini-note" style="margin-top:7px;">
+      Rapide : débit Bluetooth accéléré, avec une pause de sécurité après chaque étiquette pour éviter qu'une 2e impression soit perdue.
+    </div>
+    <div class="mini-note" style="margin-top:5px;">
+      Si la M110 saute encore une étiquette blanche, charge le rouleau bien droit puis appuie une fois sur le bouton d'avance papier pour qu'elle reconnaisse le format avant de relancer le test de 3 étiquettes.
+    </div>
   </div>
   <label style="display:flex; align-items:center; gap:8px; margin-top:10px; font-size:14px; font-weight:bold; color:#1b5e20;">
     <input type="checkbox" id="autoPrintSingle" checked>
@@ -559,9 +578,53 @@ const M110_BLE = {
     '49535343-fe7d-4ae5-8fa9-9fafd205e455'
   ],
   preferredWriteCharacteristic: 0xff02,
-  chunkSize: 128,
-  chunkDelay: 20
+  chunkSize: 128
 };
+
+// V14 — Le M110 est déjà réglé à sa vitesse imprimante maximale (valeur 5).
+// On accélère donc surtout le transfert Bluetooth, tout en gardant une pause
+// après chaque étiquette pour éviter que l'impression suivante soit perdue.
+const M110_SPEED_PROFILE_KEY = 'm110-speed-profile-v14';
+const M110_SPEED_PROFILES = {
+  turbo:  { label: '⚡ Turbo',      chunkDelay: 4,  commandDelay: 10, beforeFooter: 140, afterFooter: 650 },
+  fast:   { label: '🚀 Rapide',     chunkDelay: 8,  commandDelay: 15, beforeFooter: 170, afterFooter: 700 },
+  normal: { label: 'Normal',        chunkDelay: 12, commandDelay: 20, beforeFooter: 220, afterFooter: 750 },
+  safe:   { label: '🛡️ Compatible', chunkDelay: 20, commandDelay: 30, beforeFooter: 300, afterFooter: 900 }
+};
+
+function getM110SpeedProfile() {
+  const value = document.getElementById('m110SpeedProfile')?.value || 'fast';
+  return M110_SPEED_PROFILES[value] || M110_SPEED_PROFILES.fast;
+}
+
+function updateM110SpeedHint() {
+  const select = document.getElementById('m110SpeedProfile');
+  const hint = document.getElementById('m110SpeedHint');
+  if (!select) return;
+  const profile = M110_SPEED_PROFILES[select.value] || M110_SPEED_PROFILES.fast;
+  try { localStorage.setItem(M110_SPEED_PROFILE_KEY, select.value); } catch (_) {}
+  if (hint) {
+    if (select.value === 'turbo') {
+      hint.textContent = 'Turbo : le plus rapide. Si une étiquette devient incomplète ou est sautée, repasse sur Rapide.';
+    } else if (select.value === 'safe') {
+      hint.textContent = 'Compatible : transfert lent mais le plus prudent pour les téléphones/Bluetooth instables.';
+    } else if (select.value === 'normal') {
+      hint.textContent = 'Normal : compromis intermédiaire entre vitesse et compatibilité.';
+    } else {
+      hint.textContent = "Rapide : débit Bluetooth accéléré, avec une pause de sécurité après chaque étiquette pour éviter qu'une 2e impression soit perdue.";
+    }
+  }
+}
+
+function restoreM110SpeedUi() {
+  const select = document.getElementById('m110SpeedProfile');
+  if (!select) return;
+  try {
+    const saved = localStorage.getItem(M110_SPEED_PROFILE_KEY);
+    if (saved && M110_SPEED_PROFILES[saved]) select.value = saved;
+  } catch (_) {}
+  updateM110SpeedHint();
+}
 
 const M110_DPI = 203;
 const M110_MAX_PRINTABLE_MM = 48;
@@ -779,15 +842,19 @@ function m110CanvasToRaster(labelCanvas) {
 
 async function printRasterM110(raster, density = 6, onProgress = null) {
   if (!isM110Connected()) throw new Error('M110 non connectée');
-  const densityValue = Math.round(5 + Math.max(1, Math.min(8, density)) * 1.25);
 
-  // Vitesse, densité, papier avec espace (GAP), raster, fin d'étiquette.
+  const densityValue = Math.round(5 + Math.max(1, Math.min(8, density)) * 1.25);
+  const profile = getM110SpeedProfile();
+  const startedAt = performance.now();
+
+  // Protocole M110/M120/M220 :
+  // vitesse 5 = maximum, densité, papier à espaces (GAP), raster, footer.
   await m110Send([0x1b, 0x4e, 0x0d, 0x05]);
-  await sleep(30);
+  await sleep(profile.commandDelay);
   await m110Send([0x1b, 0x4e, 0x04, densityValue]);
-  await sleep(30);
+  await sleep(profile.commandDelay);
   await m110Send([0x1f, 0x11, 0x0a]);
-  await sleep(30);
+  await sleep(profile.commandDelay);
 
   const h = raster.heightLines;
   await m110Send(new Uint8Array([
@@ -800,13 +867,22 @@ async function printRasterM110(raster, density = 6, onProgress = null) {
   for (let i = 0; i < total; i += M110_BLE.chunkSize) {
     const chunk = raster.data.slice(i, Math.min(i + M110_BLE.chunkSize, total));
     await m110Send(chunk);
-    await sleep(M110_BLE.chunkDelay);
+    if (profile.chunkDelay > 0) await sleep(profile.chunkDelay);
     if (onProgress) onProgress(Math.round((i + chunk.length) / total * 100));
   }
 
-  await sleep(250);
+  // Laisse la M110 vider son tampon avant le footer.
+  await sleep(profile.beforeFooter);
+
+  // Footer M110 standard : conserve le recalage sur les étiquettes à espace.
   await m110Send([0x1f, 0xf0, 0x05, 0x00, 0x1f, 0xf0, 0x03, 0x00]);
-  await sleep(450);
+
+  // Pause de sécurité volontairement plus longue qu'avant :
+  // elle évite surtout que l'étiquette suivante parte alors que la M110
+  // n'a pas encore fini son recalage GAP (symptôme : 2e étiquette blanche).
+  await sleep(profile.afterFooter);
+
+  return Math.round(performance.now() - startedAt);
 }
 
 function truncateTextToWidth(ctx, text, maxWidth) {
@@ -924,9 +1000,10 @@ async function printOneM110(match, trackingValue) {
   const raster = m110CanvasToRaster(canvas);
   const density = Number(document.getElementById('m110Density')?.value || 6);
   setM110Progress(0, true);
-  await printRasterM110(raster, density, p => setM110Progress(p, true));
+  const elapsedMs = await printRasterM110(raster, density, p => setM110Progress(p, true));
   setM110Progress(100, true);
   setTimeout(() => setM110Progress(0, false), 800);
+  return elapsedMs;
 }
 
 async function manualPrintM110(matches, trackingValue) {
@@ -950,12 +1027,15 @@ function queueM110Print(matches, trackingValue) {
   m110PrintQueue = m110PrintQueue.then(async () => {
     try {
       const size = getSelectedLabelSize();
-      setM110Status(`🖨️ Impression de ${copy.length} étiquette(s) en ${size.width}×${size.height} mm…`, 'wait');
+      const profile = getM110SpeedProfile();
+      const batchStart = performance.now();
+      setM110Status(`🖨️ ${copy.length} étiquette(s) — ${size.width}×${size.height} mm — ${profile.label}…`, 'wait');
       for (let i = 0; i < copy.length; i++) {
-        setM110Status(`🖨️ Étiquette ${i + 1}/${copy.length} — ${size.width}×${size.height} mm…`, 'wait');
+        setM110Status(`🖨️ Étiquette ${i + 1}/${copy.length} — ${profile.label}…`, 'wait');
         await printOneM110(copy[i], trackingValue);
       }
-      setM110Status(`✅ ${copy.length} étiquette(s) imprimée(s).`, 'ok');
+      const seconds = ((performance.now() - batchStart) / 1000).toFixed(1);
+      setM110Status(`✅ ${copy.length} étiquette(s) imprimée(s) en ${seconds} s — ${profile.label}.`, 'ok');
       if (navigator.vibrate) navigator.vibrate([80, 40, 80]);
     } catch (err) {
       console.error('M110 print error:', err);
@@ -965,12 +1045,23 @@ function queueM110Print(matches, trackingValue) {
   return m110PrintQueue;
 }
 
-function makeM110TestMatch() {
+function makeM110TestMatch(index = 1, total = 1) {
+  const suffix = String(index).padStart(2, '0');
   return {
-    asin: 'B0TESTM110',
-    pdfBarcodeValue: '078885644192',
-    productName: 'Étiquette test Phomemo M110'
+    asin: `B0TESTM1${suffix}`,
+    pdfBarcodeValue: `078885644${String(190 + index)}`,
+    productName: total > 1 ? `TEST RAFALE ${index}/${total} — Phomemo M110` : 'Étiquette test Phomemo M110'
   };
+}
+
+async function testM110Burst() {
+  if (!isM110Connected()) {
+    const connected = await connectM110(false);
+    if (!connected) return;
+  }
+  const tests = [1, 2, 3].map(i => makeM110TestMatch(i, 3));
+  setM110Status('🧪 Test rafale : 3 étiquettes consécutives…', 'wait');
+  await queueM110Print(tests, 'TEST-RAFALE');
 }
 
 let rows = [];
@@ -3419,6 +3510,7 @@ window.addEventListener("DOMContentLoaded", () => {
   restoreSavedFiles();
   restoreLabelSizeUi();
   restoreAutoPrintSingleUi();
+  restoreM110SpeedUi();
   updateM110Buttons();
   initStorageMode();
   initCloudSync();
@@ -3430,16 +3522,18 @@ window.addEventListener("DOMContentLoaded", () => {
   document.getElementById('labelSizePreset').addEventListener('change', updateLabelSizeUi);
   document.getElementById('customLabelWidth').addEventListener('input', updateLabelSizeUi);
   document.getElementById('customLabelHeight').addEventListener('input', updateLabelSizeUi);
+  document.getElementById('m110SpeedProfile').addEventListener('change', updateM110SpeedHint);
   document.getElementById('testM110').addEventListener('click', () => manualPrintM110([makeM110TestMatch()], 'TEST'));
+  document.getElementById('testM110Burst').addEventListener('click', testM110Burst);
 });
 
 // =============================================================
-// V13 — MISE À JOUR / CACHE FIABLE
+// V14 — MISE À JOUR / CACHE FIABLE
 // - le navigateur vérifie toujours la dernière version de sw.js
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "13.0.0";
+const APP_VERSION = "14.0.0";
 
 async function installFreshServiceWorker() {
   if (!("serviceWorker" in navigator) || !(location.protocol === "https:" || location.hostname === "localhost")) return;
@@ -3470,7 +3564,7 @@ async function installFreshServiceWorker() {
       location.reload();
     });
   } catch (err) {
-    console.warn("Service worker V13 non disponible :", err);
+    console.warn("Service worker V14 non disponible :", err);
   }
 }
 
