@@ -1,0 +1,35 @@
+V13 — Catalogue commun + photo facultative + sortie rapide
+
+Tu pars de la V12 fonctionnelle.
+
+1) GOOGLE APPS SCRIPT
+- Ouvre ton Google Sheet > Extensions > Apps Script.
+- Remplace tout le contenu de Code.gs par Google-Apps-Script-Code-V13.gs.
+- Enregistre.
+- Exécute une fois la fonction initialiser().
+  -> Cela conserve Rangement et crée/met à niveau l'onglet Catalogue.
+- Déployer > Gérer les déploiements > Modifier (crayon) > Nouvelle version > Déployer.
+- Garde le même déploiement : ton URL /exec et ton code secret restent les mêmes.
+
+2) GITHUB
+- Remplace index.html par le index.html V13.
+- Remplace sw.js par le sw.js V13.
+- Ouvre une fois le site avec ?v=13 pour forcer la prise de la nouvelle version.
+
+3) CATALOGUE COMMUN
+- Quand l'ouvreur scanne un colis et que le site retrouve le ou les ASIN, le site envoie automatiquement dans Google Sheets : ASIN, titre, EAN/code, suivi et URL photo si disponible.
+- Le téléphone du rangeur peut alors scanner l'étiquette sans avoir le fichier Excel local : le titre est récupéré depuis Google Sheets.
+
+4) PHOTO
+- La V13 n'invente pas la photo et ne scrape pas Amazon.
+- Elle affiche une photo seulement si une URL d'image est disponible :
+  a) dans une colonne Image / Photo URL / Product Image du fichier principal ; ou
+  b) en colonne C facultative du 2e fichier de correspondance ; ou
+  c) si tu renseignes une Photo URL directement dans l'onglet Catalogue.
+- Le fichier Amazon Order History standard ne contient généralement pas l'URL de la photo : dans ce cas aucune photo n'est affichée.
+
+5) SORTIE RAPIDE
+- Dans Recherche, coche Sortie rapide.
+- Le réglage est désormais mémorisé sur le téléphone.
+- Si le produit n'existe que dans une seule caisse : scan = sortie immédiate de 1 exemplaire.
+- S'il existe dans plusieurs caisses : aucune sortie automatique ; le site affiche les caisses et les boutons Sortir 1.

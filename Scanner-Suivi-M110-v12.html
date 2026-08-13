@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="app-version" content="12.0.0">
-<title>Scanner Suivi → ASIN → M110 — V12 Cache auto</title>
+<title>Scanner Suivi → ASIN → M110 — V13 Catalogue + Photo + Sortie</title>
 <script src="./Dernier Fonctionnel_files/xlsx.full.min.js.télécharger"></script>
 <script src="./Dernier Fonctionnel_files/html5-qrcode.min.js.télécharger"></script>
 <script src="./Dernier Fonctionnel_files/JsBarcode.all.min.js.télécharger"></script>
@@ -267,10 +267,17 @@
   .quick-exit-wrap { display:flex; gap:8px; align-items:flex-start; margin-top:10px; padding:10px; border-radius:9px; background:#fff3e0; color:#6d4c41; text-align:left; font-size:13px; }
   .lookup-help { margin-top:7px; color:#666; font-size:12px; }
 
+
+  /* V13 — catalogue commun + photos */
+  .stock-photo-wrap { display:flex; gap:12px; align-items:flex-start; }
+  .stock-product-photo { width:92px; height:92px; object-fit:contain; border:1px solid #ddd; border-radius:10px; background:#fff; flex:0 0 auto; }
+  .stock-product-content { min-width:0; flex:1; }
+  .photo-source-note { font-size:11px; color:#777; margin-top:4px; }
+
 </style>
 </head>
 <body>
-<!-- V10 : sync visible + recherche avancée + quantités + sortie de stock -->
+<!-- V13 : catalogue commun + photo facultative + sortie rapide -->
 
 <h1>📦 Vine : ouverture → M110 → rangement synchronisé</h1>
 
@@ -528,6 +535,7 @@
         <span><strong>📤 Sortie rapide</strong><br>Après un scan, si le produit n'existe que dans une seule caisse, sortir automatiquement 1 exemplaire du stock.</span>
       </label>
       <div class="lookup-help">Sinon, la recherche affiche la quantité totale et la quantité dans chaque caisse, avec un bouton « Sortir 1 ».</div>
+      <div class="lookup-help">🖼️ Photo : affichée si le catalogue contient une <strong>URL d’image</strong> (colonne Image/Photo URL du fichier chargé ou ajoutée dans l’onglet Catalogue).</div>
       <div id="globalLookupCloudState" class="cloud-pill">☁️ Recherche locale</div>
     </div>
     <div id="globalLookupResult"></div>
@@ -1089,7 +1097,17 @@ function detectColumns(headers) {
     h === "title" ||
     h === "titre"
   );
-  return { tCol, aCol, pCol };
+  let imgCol = norm.findIndex(h =>
+    h.includes("image url") ||
+    h.includes("image_url") ||
+    h.includes("photo url") ||
+    h.includes("photo_url") ||
+    h.includes("product image") ||
+    h.includes("image produit") ||
+    h === "image" ||
+    h === "photo"
+  );
+  return { tCol, aCol, pCol, imgCol };
 }
 
 function processPrimaryFileData(arrayBuffer, fileName = "", restored = false) {
@@ -1105,7 +1123,7 @@ function processPrimaryFileData(arrayBuffer, fileName = "", restored = false) {
   }
 
   const headers = json[0];
-  const { tCol, aCol, pCol } = detectColumns(headers);
+  const { tCol, aCol, pCol, imgCol } = detectColumns(headers);
 
   if (tCol === -1 || aCol === -1) {
     document.getElementById("status").textContent =
@@ -1118,13 +1136,15 @@ function processPrimaryFileData(arrayBuffer, fileName = "", restored = false) {
     trackingRaw: r[tCol],
     asin: r[aCol],
     productName: pCol !== -1 ? r[pCol] : "",
+    photoUrl: imgCol !== -1 ? String(r[imgCol] || "").trim() : "",
   })).filter(r => r.trackingRaw);
 
   const pColLabel = pCol !== -1 ? `, colonne Produit: "<strong>${headers[pCol]}</strong>"` : ' — ⚠️ colonne "Product Name" non trouvée';
+  const imgColLabel = imgCol !== -1 ? `, colonne Photo: "<strong>${headers[imgCol]}</strong>"` : ' — photo non fournie par ce fichier';
   const restoredText = restored ? " — 💾 restauré automatiquement" : "";
   const fileText = fileName ? ` <span style="color:#555;">(${escapeHtml(fileName)})</span>` : "";
   document.getElementById("status").innerHTML =
-    `✅ ${rows.length} lignes chargées${fileText}. Colonne suivi: "<strong>${headers[tCol]}</strong>", colonne ASIN: "<strong>${headers[aCol]}</strong>"${pColLabel}.${restoredText}`;
+    `✅ ${rows.length} lignes chargées${fileText}. Colonne suivi: "<strong>${headers[tCol]}</strong>", colonne ASIN: "<strong>${headers[aCol]}</strong>"${pColLabel}${imgColLabel}.${restoredText}`;
   document.getElementById("scanInput").value = "";
   searchByProductTitle(document.getElementById("productTitleSearch").value);
 }
@@ -1253,13 +1273,14 @@ function processSecondFileData(arrayBuffer, fileName = "", restored = false) {
       asinNorm: normalize(r[0]),
       asinRaw,
       asinTokens: tokens,
-      barcodeValue: String(r[1] || "").trim()
+      barcodeValue: String(r[1] || "").trim(),
+      photoUrl: String(r[2] || "").trim()
     };
   }).filter(r => r.asinRaw && r.barcodeValue);
 
   const restoredText = restored ? " — 💾 restauré automatiquement" : "";
   const fileText = fileName ? ` <span style="color:#555;">(${escapeHtml(fileName)})</span>` : "";
-  document.getElementById("status2").innerHTML = `✅ ${secondRows.length} lignes chargées${fileText} dans le 2e fichier. Colonne A = texte contenant l'ASIN, colonne B = code-barres.${restoredText}`;
+  document.getElementById("status2").innerHTML = `✅ ${secondRows.length} lignes chargées${fileText} dans le 2e fichier. Colonne A = texte contenant l'ASIN, colonne B = code-barres, colonne C facultative = URL photo.${restoredText}`;
 }
 
 async function handleSecondFile(file, shouldSave = true) {
@@ -1350,6 +1371,9 @@ function search(value) {
   }
 
   countDiv.innerHTML = `<span class="found">✅ ${matches.length} article(s) trouvé(s) pour ce colis (scan: ${value})</span>`;
+
+  // V13 : dès l’ouverture, le catalogue commun est alimenté pour le téléphone du rangeur.
+  queueCloudCatalogMatches(matches);
 
   const labelSize = getSelectedLabelSize();
   let html = '<div style="margin-bottom:10px; display:flex; gap:8px; flex-wrap:wrap;">'
@@ -1765,6 +1789,8 @@ let cloudDeviceId = "";
 let cloudLastOkAt = 0;
 let cloudUiTimer = null;
 let lookupResultCache = new Map();
+let cloudCatalogCache = new Map();
+let storageProcessQueue = Promise.resolve();
 
 let storageRecords = [];
 let storageScanTimer = null;
@@ -2067,6 +2093,74 @@ function cloudPostForm(action, payloadObj) {
   return true;
 }
 
+
+function normalizeCatalogItem(item) {
+  if (!item) return null;
+  const asin = String(item.asin || "").trim().toUpperCase();
+  if (!asin) return null;
+  return {
+    asin,
+    productName: String(item.productName || "").trim(),
+    ean: String(item.ean || item.labelBarcode || "").trim(),
+    tracking: String(item.tracking || "").trim(),
+    photoUrl: String(item.photoUrl || "").trim(),
+    device: cloudDeviceId || ""
+  };
+}
+
+function queueCloudCatalogItem(item) {
+  const normalized = normalizeCatalogItem(item);
+  if (!normalized || !isCloudConfigured()) return;
+  const key = normalize(normalized.asin);
+  cloudCatalogCache.set(key, normalized);
+  cloudPendingOps = cloudPendingOps.filter(op => !(op && op.type === "catalog" && normalize(op.item?.asin) === key));
+  cloudPendingOps.push({ type:"catalog", item:normalized });
+  saveCloudPending();
+  flushCloudPending().catch(() => {});
+}
+
+function queueCloudCatalogMatches(matches) {
+  for (const m of matches || []) {
+    queueCloudCatalogItem({
+      asin: m.asin,
+      productName: m.productName,
+      ean: m.pdfBarcodeValue && normalize(m.pdfBarcodeValue) !== normalize(m.asin) ? m.pdfBarcodeValue : "",
+      tracking: m.trackingRaw || m.tracking,
+      photoUrl: m.photoUrl || ""
+    });
+  }
+}
+
+async function cloudCatalogLookup(raw) {
+  const q = String(raw || "").trim();
+  if (!q) return [];
+  const localKey = normalize(q);
+  if (cloudCatalogCache.has(localKey)) return [cloudCatalogCache.get(localKey)];
+  if (!isCloudConfigured() || navigator.onLine === false) return [];
+  try {
+    const res = await cloudJsonp("catalog_lookup", { q });
+    if (!res || !res.ok) return [];
+    const items = Array.isArray(res.items) ? res.items : [];
+    for (const item of items) {
+      const n = normalizeCatalogItem(item);
+      if (n) cloudCatalogCache.set(normalize(n.asin), n);
+    }
+    return items;
+  } catch (_) {
+    return [];
+  }
+}
+
+function safePhotoUrl(value) {
+  const s = String(value || "").trim();
+  if (!s) return "";
+  try {
+    const u = new URL(s, location.href);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return "";
+    return u.href;
+  } catch (_) { return ""; }
+}
+
 function queueCloudAdd(record) {
   if (!record || !record.id || !isCloudConfigured()) return;
   if (!cloudPendingOps.some(op => op.type === "add" && op.record && op.record.id === record.id)) {
@@ -2147,6 +2241,7 @@ function mergeCloudSnapshot(snapshot, pushLocal = true) {
       productName: r.productName || "",
       tracking: r.tracking || "",
       ean: r.ean || "",
+      photoUrl: r.photoUrl || "",
       device: r.device || ""
     });
     localIds.add(id);
@@ -2187,11 +2282,13 @@ async function flushCloudPending() {
     const activeIds = new Set((snap.records || []).map(r => String(r.id || "")));
     const cancelled = new Set((snap.cancelledIds || []).map(String));
     const outIds = new Set((snap.outIds || []).map(String));
+    const catalogKeys = new Set((snap.catalogKeys || []).map(String));
     const confirmed = new Set();
     batch.forEach((op, index) => {
       if (op.type === "add" && op.record && (activeIds.has(String(op.record.id)) || cancelled.has(String(op.record.id)) || outIds.has(String(op.record.id)))) confirmed.add(index);
       if (op.type === "cancel" && cancelled.has(String(op.id))) confirmed.add(index);
       if (op.type === "out" && outIds.has(String(op.id))) confirmed.add(index);
+      if (op.type === "catalog" && op.item && catalogKeys.has(normalize(op.item.asin))) confirmed.add(index);
     });
     const batchSet = new Set(batch);
     cloudPendingOps = cloudPendingOps.filter(op => {
@@ -2347,12 +2444,19 @@ function renderGlobalLookupResults(raw, records, targetId = "globalLookupResult"
       </div>`;
     }).join("");
     const meta = [latest.tracking ? `Suivi : ${escapeHtml(latest.tracking)}` : "", latest.ean ? `EAN/code : ${escapeHtml(latest.ean)}` : ""].filter(Boolean).join(" · ");
+    const photo = safePhotoUrl(latest.photoUrl || cloudCatalogCache.get(normalize(asin))?.photoUrl || "");
     return `<div class="stock-product-card">
-      <div style="font-size:17px;font-weight:900;">${escapeHtml(asin)}</div>
-      ${latest.productName ? `<div style="margin:4px 0 7px;color:#555;">${escapeHtml(latest.productName)}</div>` : ""}
-      <div class="stock-summary"><span class="stock-total">Stock total : ${items.length}</span><span>${boxes.size} caisse(s)</span></div>
-      ${meta ? `<div class="meta" style="margin-bottom:5px;">${meta}</div>` : ""}
-      ${boxRows}
+      <div class="stock-photo-wrap">
+        ${photo ? `<img class="stock-product-photo" src="${escapeHtml(photo)}" alt="Photo produit" loading="lazy" onerror="this.style.display='none'">` : ""}
+        <div class="stock-product-content">
+          <div style="font-size:17px;font-weight:900;">${escapeHtml(asin)}</div>
+          ${latest.productName ? `<div style="margin:4px 0 7px;color:#555;">${escapeHtml(latest.productName)}</div>` : ""}
+          <div class="stock-summary"><span class="stock-total">Stock total : ${items.length}</span><span>${boxes.size} caisse(s)</span></div>
+          ${meta ? `<div class="meta" style="margin-bottom:5px;">${meta}</div>` : ""}
+          ${boxRows}
+          ${photo ? `<div class="photo-source-note">🖼️ Photo issue de l’URL image enregistrée dans le catalogue commun.</div>` : ""}
+        </div>
+      </div>
     </div>`;
   }).join("");
 
@@ -2377,7 +2481,7 @@ async function exitStockRecord(recordId, query, targetId = "globalLookupResult",
   queueCloudOut(id);
   storageSignal("ok");
 
-  const prefix = `<div class="cloud-status ok" style="margin-top:10px;">📤 Sortie enregistrée : <strong>${escapeHtml(record.asin || record.scannedCode || "Produit")}</strong> depuis <strong>${escapeHtml(record.box || "—")}</strong>.</div>`;
+  const prefix = `<div class="cloud-status ok" style="margin-top:10px;">📤 Sortie enregistrée : <strong>${escapeHtml(record.productName || record.asin || record.scannedCode || "Produit")}</strong> — <strong>${escapeHtml(record.box || "—")}</strong>.</div>`;
   let remaining = Array.from(lookupResultCache.values()).filter(r => String(r.id || "") !== id);
   renderGlobalLookupResults(query, remaining, targetId, prefix);
   return true;
@@ -2407,8 +2511,21 @@ async function runGlobalLookup(inputId = "globalLookupInput", resultId = "global
   if (input) { input.select?.(); input.focus({ preventScroll:true }); }
 }
 
+
+const QUICK_EXIT_KEY = "vine-quick-exit-v1";
+
+function restoreQuickExitUi() {
+  const el = document.getElementById("quickExitMode");
+  if (!el) return;
+  try { el.checked = localStorage.getItem(QUICK_EXIT_KEY) === "1"; } catch (_) {}
+  el.addEventListener("change", () => {
+    try { localStorage.setItem(QUICK_EXIT_KEY, el.checked ? "1" : "0"); } catch (_) {}
+  });
+}
+
 function initCloudSync() {
   loadCloudConfig();
+  restoreQuickExitUi();
   document.getElementById("cloudSaveBtn")?.addEventListener("click", saveCloudConfigFromUi);
   document.getElementById("cloudTestBtn")?.addEventListener("click", testCloudConnection);
   document.getElementById("cloudSyncBtn")?.addEventListener("click", () => syncCloudNow({ silent:false, pushLocal:true }));
@@ -2525,7 +2642,8 @@ function resolveStorageProduct(scannedValue) {
       labelBarcode: String(second && second.barcodeValue ? second.barcodeValue : row.asin).trim(),
       scannedCode: raw,
       tracking: String(row.trackingRaw || "").trim(),
-      ean: String(second && second.barcodeValue ? second.barcodeValue : "").trim()
+      ean: String(second && second.barcodeValue ? second.barcodeValue : "").trim(),
+      photoUrl: String(row.photoUrl || (second && second.photoUrl) || "").trim()
     };
   }
 
@@ -2548,7 +2666,8 @@ function resolveStorageProduct(scannedValue) {
       labelBarcode: String(second.barcodeValue || "").trim(),
       scannedCode: raw,
       tracking: row ? String(row.trackingRaw || "").trim() : "",
-      ean: String(second.barcodeValue || "").trim()
+      ean: String(second.barcodeValue || "").trim(),
+      photoUrl: String((row && row.photoUrl) || second.photoUrl || "").trim()
     };
   }
 
@@ -2564,7 +2683,8 @@ function resolveStorageProduct(scannedValue) {
         labelBarcode: String(secondMatch && secondMatch.barcodeValue ? secondMatch.barcodeValue : row.asin).trim(),
         scannedCode: raw,
         tracking: String(row.trackingRaw || "").trim(),
-        ean: String(secondMatch && secondMatch.barcodeValue ? secondMatch.barcodeValue : "").trim()
+        ean: String(secondMatch && secondMatch.barcodeValue ? secondMatch.barcodeValue : "").trim(),
+        photoUrl: String(row.photoUrl || (secondMatch && secondMatch.photoUrl) || "").trim()
       };
     }
   }
@@ -2573,10 +2693,47 @@ function resolveStorageProduct(scannedValue) {
   //    le fichier Amazon n'a pas encore été rechargé sur ce téléphone.
   //    Les codes de correspondance personnalisés nécessitent toujours le 2e fichier.
   if (/^B0[A-Z0-9]{8}$/i.test(raw)) {
-    return { asin: raw.toUpperCase(), productName: "", labelBarcode: raw, scannedCode: raw, tracking: "", ean: "" };
+    return { asin: raw.toUpperCase(), productName: "", labelBarcode: raw, scannedCode: raw, tracking: "", ean: "", photoUrl: "" };
   }
 
   return null;
+}
+
+
+async function resolveStorageProductShared(scannedValue) {
+  const raw = String(scannedValue || "").trim();
+  let product = resolveStorageProduct(raw);
+
+  const needsCatalog = !product || !String(product.productName || "").trim() || !String(product.photoUrl || "").trim();
+  if (needsCatalog) {
+    const items = await cloudCatalogLookup(product?.asin || raw);
+    const nraw = normalize(raw);
+    const nasin = normalize(product?.asin || "");
+    const item = items.find(x =>
+      (nasin && normalize(x.asin) === nasin) ||
+      normalize(x.asin) === nraw ||
+      normalize(x.ean) === nraw
+    ) || items[0] || null;
+
+    if (item) {
+      if (!product) {
+        product = {
+          asin: String(item.asin || "").trim(),
+          productName: "",
+          labelBarcode: String(item.ean || item.asin || raw).trim(),
+          scannedCode: raw,
+          tracking: "",
+          ean: "",
+          photoUrl: ""
+        };
+      }
+      if (!product.productName) product.productName = String(item.productName || "").trim();
+      if (!product.tracking) product.tracking = String(item.tracking || "").trim();
+      if (!product.ean) product.ean = String(item.ean || "").trim();
+      if (!product.photoUrl) product.photoUrl = String(item.photoUrl || "").trim();
+    }
+  }
+  return product;
 }
 
 function getStorageAudioContext() {
@@ -2654,7 +2811,10 @@ function bestKnownProductName(asin, scannedCode, preferredName = "") {
   // 1) Fichier Amazon chargé sur ce téléphone.
   let row = rows.find(r => asinNorm && normalize(r.asin) === asinNorm);
   if (row && String(row.productName || "").trim()) return String(row.productName).trim();
-  // 2) Un ancien rangement déjà synchronisé peut aussi contenir le titre.
+  // 2) Catalogue commun Google Sheets déjà consulté sur ce téléphone.
+  const cat = cloudCatalogCache.get(asinNorm);
+  if (cat && String(cat.productName || "").trim()) return String(cat.productName).trim();
+  // 3) Un ancien rangement déjà synchronisé peut aussi contenir le titre.
   for (let i = storageRecords.length - 1; i >= 0; i--) {
     const r = storageRecords[i];
     const sameAsin = asinNorm && normalize(r.asin) === asinNorm;
@@ -2730,7 +2890,7 @@ function renderStorageState() {
   `).join("");
 }
 
-function handleStorageScan(value) {
+async function handleStorageScan(value) {
   const raw = String(value || "").trim();
   if (!raw) return;
 
@@ -2761,7 +2921,8 @@ function handleStorageScan(value) {
     return;
   }
 
-  const product = resolveStorageProduct(raw);
+  showStorageProductConfirmation({ asin: raw, scannedCode: raw, productName: "Recherche du produit…" }, activeBox, "waiting");
+  const product = await resolveStorageProductShared(raw);
   if (!product) {
     setStorageStatus(`❌ Code non reconnu : <strong>${escapeHtml(raw)}</strong><br><span style="font-weight:normal;">Vérifie que les fichiers Excel sont chargés et que le code correspond à l'ASIN ou au code imprimé sur la M110.</span>`, "err");
     showStorageProductConfirmation({ scannedCode: raw }, activeBox, "error");
@@ -2781,13 +2942,15 @@ function handleStorageScan(value) {
     labelBarcode: product.labelBarcode,
     productName: product.productName,
     tracking: product.tracking || "",
-    ean: product.ean || product.labelBarcode || ""
+    ean: product.ean || product.labelBarcode || "",
+    photoUrl: product.photoUrl || ""
   };
 
   storageRecords.push(record);
   saveStorageRecords();
   renderStorageState();
   queueCloudAdd(record);
+  queueCloudCatalogItem(record);
 
   setStorageStatus(
     `✅ <strong>${escapeHtml(product.asin)}</strong> → <strong>${escapeHtml(activeBox)}</strong> <span style="font-weight:normal;">(Rangeur ${storageOperator})</span>`,
@@ -2803,7 +2966,12 @@ function processStorageInputNow() {
   const value = input.value.trim();
   if (!value) return;
   input.value = "";
-  handleStorageScan(value);
+  storageProcessQueue = storageProcessQueue
+    .then(() => handleStorageScan(value))
+    .catch(err => {
+      setStorageStatus(`❌ Erreur de traitement : ${escapeHtml(err?.message || String(err))}`, "err");
+      storageSignal("error");
+    });
   setTimeout(() => input.focus({ preventScroll: true }), 20);
 }
 
@@ -2838,6 +3006,7 @@ function exportStorageExcel() {
       "Code scanné": r.scannedCode,
       "Code étiquette": r.labelBarcode,
       "Produit": r.productName,
+      "Photo URL": r.photoUrl || "",
       "N° suivi": r.tracking || "",
       "EAN / code": r.ean || r.labelBarcode || ""
     };
@@ -3265,12 +3434,12 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 // =============================================================
-// V12 — MISE À JOUR / CACHE FIABLE
+// V13 — MISE À JOUR / CACHE FIABLE
 // - le navigateur vérifie toujours la dernière version de sw.js
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "12.0.0";
+const APP_VERSION = "13.0.0";
 
 async function installFreshServiceWorker() {
   if (!("serviceWorker" in navigator) || !(location.protocol === "https:" || location.hostname === "localhost")) return;
@@ -3301,7 +3470,7 @@ async function installFreshServiceWorker() {
       location.reload();
     });
   } catch (err) {
-    console.warn("Service worker V12 non disponible :", err);
+    console.warn("Service worker V13 non disponible :", err);
   }
 }
 
