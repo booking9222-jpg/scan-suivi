@@ -277,7 +277,7 @@
 </style>
 </head>
 <body>
-<!-- V14 : catalogue commun + photo + sortie rapide + M110 accélérée -->
+<!-- V15 : code-barres élargi + M110 accélérée -->
 
 <h1>📦 Vine : ouverture → M110 → rangement synchronisé</h1>
 
@@ -362,6 +362,20 @@
     </div>
     <div class="mini-note" style="margin-top:5px;">
       Si la M110 saute encore une étiquette blanche, charge le rouleau bien droit puis appuie une fois sur le bouton d'avance papier pour qu'elle reconnaisse le format avant de relancer le test de 3 étiquettes.
+    </div>
+  </div>
+  <div style="margin-top:10px; padding:10px; border:1px solid #eadcff; border-radius:9px; background:#fcf8ff;">
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <label style="font-size:13px; font-weight:bold; color:#5e35b1;">🧾 Mise en page M110 :
+        <select id="m110LayoutProfile" style="padding:7px; border:1px solid #bbb; border-radius:6px;">
+          <option value="normal">Normal</option>
+          <option value="wide" selected>Code-barres large</option>
+          <option value="xxl">Code-barres XXL</option>
+        </select>
+      </label>
+    </div>
+    <div id="m110LayoutHint" class="mini-note" style="margin-top:7px; color:#5e35b1;">
+      Code-barres large : le code prend davantage de largeur et de hauteur. Le descriptif est un peu plus compact pour améliorer la netteté et la lisibilité au scan.
     </div>
   </div>
   <label style="display:flex; align-items:center; gap:8px; margin-top:10px; font-size:14px; font-weight:bold; color:#1b5e20;">
@@ -591,6 +605,56 @@ const M110_SPEED_PROFILES = {
   normal: { label: 'Normal',        chunkDelay: 12, commandDelay: 20, beforeFooter: 220, afterFooter: 750 },
   safe:   { label: '🛡️ Compatible', chunkDelay: 20, commandDelay: 30, beforeFooter: 300, afterFooter: 900 }
 };
+
+const M110_LAYOUT_PROFILE_KEY = 'm110-layout-profile-v15';
+const M110_LAYOUT_PROFILES = {
+  normal: {
+    label: 'Normal', sideRatio: 0.020, trackFontRatio: 0.050, asinFontRatio: 0.082, codeFontRatio: 0.092,
+    titleFontRatio: 0.050, barcodeHeight30: 0.34, barcodeHeightOther: 0.38, titleMax30: 3, titleMaxOther: 4,
+    moduleCandidates40: [2,1], moduleCandidates50: [3,2,1], barcodeMargin: 1
+  },
+  wide: {
+    label: 'Code-barres large', sideRatio: 0.014, trackFontRatio: 0.047, asinFontRatio: 0.078, codeFontRatio: 0.088,
+    titleFontRatio: 0.044, barcodeHeight30: 0.40, barcodeHeightOther: 0.44, titleMax30: 2, titleMaxOther: 3,
+    moduleCandidates40: [3,2,1], moduleCandidates50: [4,3,2,1], barcodeMargin: 0
+  },
+  xxl: {
+    label: 'Code-barres XXL', sideRatio: 0.010, trackFontRatio: 0.044, asinFontRatio: 0.074, codeFontRatio: 0.084,
+    titleFontRatio: 0.040, barcodeHeight30: 0.44, barcodeHeightOther: 0.48, titleMax30: 2, titleMaxOther: 2,
+    moduleCandidates40: [3,2,1], moduleCandidates50: [4,3,2,1], barcodeMargin: 0
+  }
+};
+
+function getM110LayoutProfile() {
+  const value = document.getElementById('m110LayoutProfile')?.value || 'wide';
+  return M110_LAYOUT_PROFILES[value] || M110_LAYOUT_PROFILES.wide;
+}
+
+function updateM110LayoutHint() {
+  const select = document.getElementById('m110LayoutProfile');
+  const hint = document.getElementById('m110LayoutHint');
+  if (!select) return;
+  const value = select.value;
+  try { localStorage.setItem(M110_LAYOUT_PROFILE_KEY, value); } catch (_) {}
+  if (!hint) return;
+  if (value === 'xxl') {
+    hint.textContent = 'Code-barres XXL : priorité maximale au scan. Le code-barres devient plus large et plus haut ; le titre est plus compact.';
+  } else if (value === 'normal') {
+    hint.textContent = 'Normal : mise en page équilibrée entre texte et code-barres.';
+  } else {
+    hint.textContent = 'Code-barres large : le code prend davantage de largeur et de hauteur. Le descriptif est un peu plus compact pour améliorer la netteté et la lisibilité au scan.';
+  }
+}
+
+function restoreM110LayoutUi() {
+  const select = document.getElementById('m110LayoutProfile');
+  if (!select) return;
+  try {
+    const saved = localStorage.getItem(M110_LAYOUT_PROFILE_KEY);
+    if (saved && M110_LAYOUT_PROFILES[saved]) select.value = saved;
+  } catch (_) {}
+  updateM110LayoutHint();
+}
 
 function getM110SpeedProfile() {
   const value = document.getElementById('m110SpeedProfile')?.value || 'fast';
@@ -926,65 +990,68 @@ function generateM110LabelCanvas(match, trackingValue) {
   ctx.imageSmoothingEnabled = false;
   ctx.textBaseline = 'alphabetic';
 
-  // Mise en page volontairement proche du PDF :
-  // suivi en haut, grand code-barres, ASIN + code en gras, titre lisible en bas.
-  const side = Math.max(6, Math.round(W * 0.02));
   const is30High = size.height <= 32;
-  const trackingFont = Math.max(11, Math.min(15, Math.round(H * 0.050)));
-  const asinFont = Math.max(17, Math.min(24, Math.round(H * 0.082)));
-  const codeFont = Math.max(18, Math.min(26, Math.round(H * 0.092)));
-  const titleFont = Math.max(11, Math.min(16, Math.round(H * 0.050)));
+  const layout = getM110LayoutProfile();
+  const side = Math.max(3, Math.round(W * layout.sideRatio));
+  const trackingFont = Math.max(10, Math.min(15, Math.round(H * layout.trackFontRatio)));
+  const asinFont = Math.max(15, Math.min(23, Math.round(H * layout.asinFontRatio)));
+  const codeFont = Math.max(16, Math.min(24, Math.round(H * layout.codeFontRatio)));
+  const titleFont = Math.max(10, Math.min(15, Math.round(H * layout.titleFontRatio)));
 
-  // 1) Numéro de suivi : aligné à gauche comme dans le PDF.
-  let y = Math.max(trackingFont + 2, Math.round(H * 0.065));
+  let y = Math.max(trackingFont + 2, Math.round(H * 0.060));
   ctx.textAlign = 'left';
   ctx.font = `${trackingFont}px Arial`;
   const trackingText = `Colis - N° de suivi: ${trackingValue || ''}`;
   ctx.fillText(truncateTextToWidth(ctx, trackingText, W - side * 2), side, y);
 
-  // 2) Code-barres : plus haut et très proche des bords utiles.
-  const bc = document.createElement('canvas');
   const barcodeValue = String(match.pdfBarcodeValue || match.asin || '');
-  const barcodeModule = W >= 300 ? 2 : 1;
-  JsBarcode(bc, barcodeValue, {
-    format: 'CODE128',
-    displayValue: false,
-    margin: 1,
-    height: Math.max(62, Math.round(H * (is30High ? 0.34 : 0.38))),
-    width: barcodeModule
-  });
-
-  const barcodeTop = y + Math.max(5, Math.round(H * 0.018));
+  const targetBh = Math.max(62, Math.round(H * (is30High ? layout.barcodeHeight30 : layout.barcodeHeightOther)));
+  const barcodeTop = y + Math.max(4, Math.round(H * 0.015));
   const maxBw = W - side * 2;
-  const maxBh = Math.max(58, Math.round(H * (is30High ? 0.34 : 0.38)));
+  const maxBh = targetBh;
+  const candidates = (size.width >= 49 ? layout.moduleCandidates50 : layout.moduleCandidates40) || [2, 1];
+
+  let bestCanvas = null;
+  let bestFits = false;
+  for (const moduleWidth of candidates) {
+    const bc = document.createElement('canvas');
+    JsBarcode(bc, barcodeValue, {
+      format: 'CODE128',
+      displayValue: false,
+      margin: layout.barcodeMargin,
+      height: targetBh,
+      width: moduleWidth
+    });
+    if (!bestCanvas || (bc.width > bestCanvas.width && bc.width <= maxBw + 1)) bestCanvas = bc;
+    if (bc.width <= maxBw + 1 && bc.height <= maxBh + 1) { bestCanvas = bc; bestFits = true; break; }
+  }
+  const bc = bestCanvas || document.createElement('canvas');
+
   let dw = bc.width;
   let dh = bc.height;
-
-  // On réduit seulement si nécessaire ; pas d'agrandissement artificiel qui pourrait
-  // déformer les modules du Code128.
-  if (dw > maxBw || dh > maxBh) {
+  if (!bestFits && (dw > maxBw || dh > maxBh)) {
     const scale = Math.min(maxBw / dw, maxBh / dh);
     dw = Math.max(1, Math.floor(dw * scale));
     dh = Math.max(1, Math.floor(dh * scale));
   }
   ctx.drawImage(bc, Math.round((W - dw) / 2), barcodeTop, dw, dh);
 
-  // 3) ASIN + valeur encodée : nettement plus gros et gras.
-  y = barcodeTop + dh + Math.max(asinFont, Math.round(H * 0.075));
+  y = barcodeTop + dh + Math.max(Math.round(H * 0.050), asinFont - 1);
   ctx.textAlign = 'center';
   ctx.font = `bold ${asinFont}px Arial`;
   ctx.fillText(truncateTextToWidth(ctx, String(match.asin || ''), W - side * 2), W / 2, y);
 
-  y += codeFont + Math.max(1, Math.round(H * 0.004));
+  y += codeFont + Math.max(0, Math.round(H * 0.002));
   ctx.font = `bold ${codeFont}px Arial`;
   ctx.fillText(truncateTextToWidth(ctx, barcodeValue, W - side * 2), W / 2, y);
 
-  // 4) Titre : plus noir et plus lisible que dans la première version M110.
-  y += titleFont + Math.max(4, Math.round(H * 0.015));
+  y += titleFont + Math.max(2, Math.round(H * 0.010));
   ctx.font = `bold ${titleFont}px Arial`;
   const remaining = Math.max(0, H - y - 3);
-  const lineStep = titleFont + 2;
-  const maxLines = Math.max(1, Math.min(size.height <= 30 ? 3 : 4, Math.floor(remaining / lineStep) + 1));
+  const lineStep = titleFont + 1;
+  const maxLinesByRoom = Math.max(1, Math.floor(remaining / lineStep) + 1);
+  const maxLinesWanted = is30High ? layout.titleMax30 : layout.titleMaxOther;
+  const maxLines = Math.max(1, Math.min(maxLinesWanted, maxLinesByRoom));
   const lines = wrapM110Text(ctx, match.productName || '', W - side * 2, maxLines);
   for (const line of lines) {
     if (y > H - 2) break;
@@ -3511,6 +3578,7 @@ window.addEventListener("DOMContentLoaded", () => {
   restoreLabelSizeUi();
   restoreAutoPrintSingleUi();
   restoreM110SpeedUi();
+  restoreM110LayoutUi();
   updateM110Buttons();
   initStorageMode();
   initCloudSync();
@@ -3523,17 +3591,18 @@ window.addEventListener("DOMContentLoaded", () => {
   document.getElementById('customLabelWidth').addEventListener('input', updateLabelSizeUi);
   document.getElementById('customLabelHeight').addEventListener('input', updateLabelSizeUi);
   document.getElementById('m110SpeedProfile').addEventListener('change', updateM110SpeedHint);
+  document.getElementById('m110LayoutProfile').addEventListener('change', updateM110LayoutHint);
   document.getElementById('testM110').addEventListener('click', () => manualPrintM110([makeM110TestMatch()], 'TEST'));
   document.getElementById('testM110Burst').addEventListener('click', testM110Burst);
 });
 
 // =============================================================
-// V14 — MISE À JOUR / CACHE FIABLE
+// V15 — MISE À JOUR / CACHE FIABLE
 // - le navigateur vérifie toujours la dernière version de sw.js
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "14.0.0";
+const APP_VERSION = "15.0.0";
 
 async function installFreshServiceWorker() {
   if (!("serviceWorker" in navigator) || !(location.protocol === "https:" || location.hostname === "localhost")) return;
@@ -3564,7 +3633,7 @@ async function installFreshServiceWorker() {
       location.reload();
     });
   } catch (err) {
-    console.warn("Service worker V14 non disponible :", err);
+    console.warn("Service worker V15 non disponible :", err);
   }
 }
 
