@@ -1,0 +1,19 @@
+V18 — ASIN/CODE EN GRAS + DESCRIPTION PLUS GRANDE (MAX 3 LIGNES)
+
+À mettre sur GitHub :
+- index.html
+- sw.js
+
+Aucun changement Google Sheets / Apps Script.
+
+Nouveautés :
+1. ASIN en gras.
+2. Code imprimé sous l'ASIN en gras.
+3. Description produit en police plus grande.
+4. Description limitée à 3 lignes maximum.
+5. Conservation de l'envoi groupé M110 de la V17.
+
+Après mise à jour :
+1. Ouvre https://222-ipg.github.io/?v=18
+2. Connecte la M110
+3. Imprime 2 ou 3 étiquettes réelles pour vérifier le rendu.

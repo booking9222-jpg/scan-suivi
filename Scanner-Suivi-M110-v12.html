@@ -277,7 +277,7 @@
 </style>
 </head>
 <body>
-<!-- V17 : texte non gras + envoi groupé M110 -->
+<!-- V18 : ASIN/code gras + description plus grande max 3 lignes -->
 
 <h1>📦 Vine : ouverture → M110 → rangement synchronisé</h1>
 
@@ -996,7 +996,7 @@ function generateM110LabelCanvas(match, trackingValue) {
   const trackingFont = Math.max(10, Math.min(14, Math.round(H * layout.trackFontRatio)));
   const asinFont = Math.max(14, Math.min(21, Math.round(H * (layout.asinFontRatio - 0.004))));
   const codeFont = Math.max(15, Math.min(22, Math.round(H * (layout.codeFontRatio - 0.004))));
-  const titleFont = Math.max(10, Math.min(14, Math.round(H * layout.titleFontRatio)));
+  const titleFont = Math.max(11, Math.min(16, Math.round(H * (layout.titleFontRatio + 0.008))));
 
   let y = Math.max(trackingFont + 2, Math.round(H * 0.060));
   ctx.textAlign = 'left';
@@ -1038,11 +1038,11 @@ function generateM110LabelCanvas(match, trackingValue) {
 
   y = barcodeTop + dh + Math.max(Math.round(H * 0.032), asinFont - 4);
   ctx.textAlign = 'center';
-  ctx.font = `${asinFont}px Arial`;
+  ctx.font = `bold ${asinFont}px Arial`;
   ctx.fillText(truncateTextToWidth(ctx, String(match.asin || ''), W - side * 2), W / 2, y);
 
   y += codeFont + Math.max(0, Math.round(H * 0.002));
-  ctx.font = `${codeFont}px Arial`;
+  ctx.font = `bold ${codeFont}px Arial`;
   ctx.fillText(truncateTextToWidth(ctx, barcodeValue, W - side * 2), W / 2, y);
 
   y += titleFont + Math.max(2, Math.round(H * 0.008));
@@ -1050,12 +1050,12 @@ function generateM110LabelCanvas(match, trackingValue) {
   const remaining = Math.max(0, H - y - 3);
   const lineStep = titleFont + 1;
   const maxLinesByRoom = Math.max(1, Math.floor(remaining / lineStep) + 1);
-  const maxLinesWanted = (is30High ? layout.titleMax30 : layout.titleMaxOther) + 1;
+  const maxLinesWanted = 3;
   const maxLines = Math.max(1, Math.min(maxLinesWanted, maxLinesByRoom));
   const lines = wrapM110Text(ctx, match.productName || '', W - side * 2, maxLines);
   const blockHeight = Math.max(0, (lines.length - 1) * lineStep);
   const extraDown = Math.max(0, H - 4 - y - blockHeight);
-  y += Math.min(extraDown, Math.round(H * 0.10));
+  y += Math.min(extraDown, Math.round(H * 0.08));
   for (const line of lines) {
     if (y > H - 2) break;
     ctx.fillText(line, W / 2, y);
@@ -3656,12 +3656,12 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 // =============================================================
-// V17 — MISE À JOUR / CACHE FIABLE
+// V18 — MISE À JOUR / CACHE FIABLE
 // - le navigateur vérifie toujours la dernière version de sw.js
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "17.0.0";
+const APP_VERSION = "18.0.0";
 
 async function installFreshServiceWorker() {
   if (!("serviceWorker" in navigator) || !(location.protocol === "https:" || location.hostname === "localhost")) return;
@@ -3692,7 +3692,7 @@ async function installFreshServiceWorker() {
       location.reload();
     });
   } catch (err) {
-    console.warn("Service worker V17 non disponible :", err);
+    console.warn("Service worker V18 non disponible :", err);
   }
 }
 
