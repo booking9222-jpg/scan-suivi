@@ -280,10 +280,10 @@
 </style>
 </head>
 <body>
-<!-- V20 : M110 Ultra adaptatif 1-13 étiquettes -->
+<!-- V21 : M110 Ultra sûr 128 octets, optimisé 1-13 -->
 
 <h1>📦 Vine : ouverture → M110 → rangement synchronisé</h1>
-<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v20</strong></div>
+<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v21</strong></div>
 
 <div class="team-workflow-card" id="teamWorkflowCard">
   <div class="team-workflow-title">⚙️ Organisation du travail</div>
@@ -353,9 +353,9 @@
     <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
       <label style="font-size:13px; font-weight:bold;">🚀 Débit Bluetooth :
         <select id="m110SpeedProfile" style="padding:7px; border:1px solid #bbb; border-radius:6px;">
-          <option value="ultra" selected>⚡ Ultra 1–13 — adaptatif</option>
-          <option value="turbo">⚡ Turbo — fiable</option>
-          <option value="fast">🚀 Rapide</option>
+          <option value="ultra128" selected>⚡ Ultra sûr 128 — 1 à 13</option>
+          <option value="turbo">🚀 Turbo fiable 128</option>
+          <option value="fast">Rapide 128</option>
           <option value="normal">Normal</option>
           <option value="safe">🛡️ Compatible</option>
         </select>
@@ -363,13 +363,13 @@
       <button class="btn printer-btn secondary" id="testM110Burst">🧪 Test 3 étiquettes</button>
     </div>
     <div id="m110SpeedHint" class="mini-note" style="margin-top:7px;">
-      Ultra 1–13 : paquets Bluetooth plus gros, envoi en mini-rafales et pauses réduites. Si le téléphone refuse les gros paquets, retour automatique en 128 octets.
+      Ultra sûr 128 : jamais de paquet 256. Envoi groupé, mini-rafales de 2 × 128 octets, pauses courtes et petit refroidissement automatique sur les lots longs.
     </div>
     <div class="mini-note" style="margin-top:5px;">
       Si la M110 saute encore une étiquette blanche, charge le rouleau bien droit puis appuie une fois sur le bouton d'avance papier pour qu'elle reconnaisse le format avant de relancer le test de 3 étiquettes.
     </div>
     <div id="m110TransportInfo" class="mini-note" style="margin-top:5px; font-weight:700; color:#0d47a1;">
-      Transport : en attente d'un test.
+      Transport : 128 octets fixe — aucune tentative 256.
     </div>
   </div>
   <div style="margin-top:10px; padding:10px; border:1px solid #eadcff; border-radius:9px; background:#fcf8ff;">
@@ -606,67 +606,71 @@ const M110_BLE = {
 // V14 — Le M110 est déjà réglé à sa vitesse imprimante maximale (valeur 5).
 // On accélère donc surtout le transfert Bluetooth, tout en gardant une pause
 // après chaque étiquette pour éviter que l'impression suivante soit perdue.
-const M110_SPEED_PROFILE_KEY = 'm110-speed-profile-v20';
-const M110_TRANSPORT_CHUNK_KEY = 'm110-transport-chunk-v20';
+const M110_SPEED_PROFILE_KEY = 'm110-speed-profile-v21';
 
-// V20 : optimisé pour les lots habituels de 1 à 13 étiquettes.
-// Ultra tente 256 octets ; si le téléphone / Web Bluetooth refuse,
-// le transfert repasse automatiquement à 128 octets sans perdre le lot.
+// V21 : aucun paquet > 128 octets.
+// C'est volontaire après le test V20 qui a montré que 256 octets pouvait
+// être accepté par Chrome mais corrompu dans le tampon de la M110.
 const M110_SPEED_PROFILES = {
-  ultra: {
-    label: '⚡ Ultra 1–13',
-    chunkSize: 256,
-    fallbackChunkSize: 128,
+  ultra128: {
+    label: '⚡ Ultra sûr 128',
+    chunkSize: 128,
     burstSize: 2,
     burstDelay: 5,
     commandDelay: 6,
-    beforeFooter: 70,
-    betweenLabels: 220,
-    afterFooter: 420
+    beforeFooter: 80,
+    betweenLabels: 240,
+    afterFooter: 430,
+    cooldownEvery: 5,
+    cooldownMs: 90
   },
   turbo: {
-    label: '⚡ Turbo',
+    label: '🚀 Turbo fiable 128',
     chunkSize: 128,
-    fallbackChunkSize: 128,
     burstSize: 2,
     burstDelay: 7,
     commandDelay: 9,
     beforeFooter: 110,
     betweenLabels: 340,
-    afterFooter: 560
+    afterFooter: 560,
+    cooldownEvery: 5,
+    cooldownMs: 110
   },
   fast: {
-    label: '🚀 Rapide',
+    label: 'Rapide 128',
     chunkSize: 128,
-    fallbackChunkSize: 128,
     burstSize: 1,
     burstDelay: 8,
     commandDelay: 15,
     beforeFooter: 170,
     betweenLabels: 500,
-    afterFooter: 700
+    afterFooter: 700,
+    cooldownEvery: 0,
+    cooldownMs: 0
   },
   normal: {
     label: 'Normal',
     chunkSize: 128,
-    fallbackChunkSize: 128,
     burstSize: 1,
     burstDelay: 12,
     commandDelay: 20,
     beforeFooter: 220,
     betweenLabels: 560,
-    afterFooter: 750
+    afterFooter: 750,
+    cooldownEvery: 0,
+    cooldownMs: 0
   },
   safe: {
     label: '🛡️ Compatible',
     chunkSize: 128,
-    fallbackChunkSize: 128,
     burstSize: 1,
     burstDelay: 20,
     commandDelay: 30,
     beforeFooter: 300,
     betweenLabels: 680,
-    afterFooter: 900
+    afterFooter: 900,
+    cooldownEvery: 0,
+    cooldownMs: 0
   }
 };
 
@@ -721,28 +725,27 @@ function restoreM110LayoutUi() {
 }
 
 function getM110SpeedProfile() {
-  const value = document.getElementById('m110SpeedProfile')?.value || 'ultra';
-  return M110_SPEED_PROFILES[value] || M110_SPEED_PROFILES.ultra;
+  const value = document.getElementById('m110SpeedProfile')?.value || 'ultra128';
+  return M110_SPEED_PROFILES[value] || M110_SPEED_PROFILES.ultra128;
 }
 
 function updateM110SpeedHint() {
   const select = document.getElementById('m110SpeedProfile');
   const hint = document.getElementById('m110SpeedHint');
   if (!select) return;
-  const profile = M110_SPEED_PROFILES[select.value] || M110_SPEED_PROFILES.ultra;
   try { localStorage.setItem(M110_SPEED_PROFILE_KEY, select.value); } catch (_) {}
   if (!hint) return;
 
-  if (select.value === 'ultra') {
-    hint.textContent = "Ultra 1–13 : paquets 256 octets quand possible, mini-rafales de 2, pauses inter-étiquettes réduites et retour automatique à 128 octets si nécessaire.";
+  if (select.value === 'ultra128') {
+    hint.textContent = "Ultra sûr 128 : uniquement 128 octets, mini-rafales de 2, pause courte entre étiquettes et micro-pause automatique toutes les 5 étiquettes.";
   } else if (select.value === 'turbo') {
-    hint.textContent = "Turbo : paquets 128 octets, mini-rafales et pauses réduites. Un peu moins rapide qu'Ultra, mais très prudent.";
+    hint.textContent = "Turbo fiable 128 : même transport sûr en 128 octets, avec un peu plus de marge entre les étiquettes.";
   } else if (select.value === 'safe') {
-    hint.textContent = 'Compatible : transfert le plus lent, à utiliser seulement si le Bluetooth est instable.';
+    hint.textContent = 'Compatible : le plus prudent si un téléphone Bluetooth est instable.';
   } else if (select.value === 'normal') {
-    hint.textContent = 'Normal : compromis conservateur entre vitesse et compatibilité.';
+    hint.textContent = 'Normal : mode conservateur.';
   } else {
-    hint.textContent = 'Rapide : réglage fiable avec pauses de sécurité plus longues.';
+    hint.textContent = 'Rapide 128 : fiable, mais avec davantage de pauses que les modes Ultra/Turbo.';
   }
 }
 
@@ -752,6 +755,9 @@ function restoreM110SpeedUi() {
   try {
     const saved = localStorage.getItem(M110_SPEED_PROFILE_KEY);
     if (saved && M110_SPEED_PROFILES[saved]) select.value = saved;
+    else select.value = 'ultra128';
+    // Efface le souvenir expérimental V20 pour garantir qu'aucun 256 ne soit repris.
+    localStorage.removeItem('m110-transport-chunk-v20');
   } catch (_) {}
   updateM110SpeedHint();
 }
@@ -904,48 +910,17 @@ function setM110TransportInfo(text) {
   if (el) el.textContent = text;
 }
 
-function getRememberedM110ChunkSize(profile) {
-  // Les écritures avec réponse sont plus conservatrices.
-  if (m110UseWriteWithResponse) return Math.min(128, profile.chunkSize || 128);
-  if ((profile.chunkSize || 128) <= 128) return 128;
-  try {
-    const saved = Number(localStorage.getItem(M110_TRANSPORT_CHUNK_KEY) || 0);
-    if (saved === 128 || saved === 256) return Math.min(saved, profile.chunkSize);
-  } catch (_) {}
-  return profile.chunkSize || 128;
-}
-
-function rememberM110ChunkSize(size) {
-  if (size !== 128 && size !== 256) return;
-  try { localStorage.setItem(M110_TRANSPORT_CHUNK_KEY, String(size)); } catch (_) {}
-}
-
 async function sendRasterPayloadM110(data, profile, onProgress = null) {
   const total = data.length;
+  const chunkSize = 128; // V21 : fixe, jamais 256.
   let offset = 0;
-  let chunkSize = getRememberedM110ChunkSize(profile);
-  let fallbackUsed = false;
   let burstCount = 0;
   let writes = 0;
 
   while (offset < total) {
     const end = Math.min(offset + chunkSize, total);
     const chunk = data.slice(offset, end);
-
-    try {
-      await m110Send(chunk);
-    } catch (err) {
-      // Ne perd pas le lot : le même morceau est retenté en 128 octets.
-      if (chunkSize > (profile.fallbackChunkSize || 128)) {
-        chunkSize = profile.fallbackChunkSize || 128;
-        fallbackUsed = true;
-        rememberM110ChunkSize(chunkSize);
-        burstCount = 0;
-        setM110TransportInfo('Transport : gros paquets refusés → retour automatique à 128 octets.');
-        continue;
-      }
-      throw err;
-    }
+    await m110Send(chunk);
 
     offset = end;
     writes++;
@@ -960,8 +935,7 @@ async function sendRasterPayloadM110(data, profile, onProgress = null) {
     }
   }
 
-  if (!fallbackUsed && chunkSize > 128) rememberM110ChunkSize(chunkSize);
-  return { chunkSize, fallbackUsed, writes };
+  return { chunkSize: 128, writes };
 }
 
 function mmToDots(mm) {
@@ -1063,7 +1037,7 @@ async function printRasterM110(raster, density = 6, onProgress = null) {
   await sleep(profile.afterFooter);
 
   const elapsed = Math.round(performance.now() - startedAt);
-  setM110TransportInfo(`Transport : ${transport.chunkSize} octets/paquet · ${transport.writes} écritures · ${(elapsed / 1000).toFixed(2)} s.`);
+  setM110TransportInfo(`Transport : 128 octets fixe · ${transport.writes} écritures · ${(elapsed / 1000).toFixed(2)} s.`);
   return elapsed;
 }
 
@@ -1191,13 +1165,13 @@ function rasterizeM110Match(match, trackingValue) {
 async function printRasterBatchM110(rasters, density = 6, onLabelProgress = null) {
   if (!isM110Connected()) throw new Error('M110 non connectée');
   const list = Array.isArray(rasters) ? rasters : [];
-  if (!list.length) return { elapsedMs: 0, chunkSize: 128, writes: 0, fallbackUsed: false };
+  if (!list.length) return { elapsedMs: 0, chunkSize: 128, writes: 0 };
 
   const densityValue = Math.round(5 + Math.max(1, Math.min(8, density)) * 1.25);
   const profile = getM110SpeedProfile();
   const startedAt = performance.now();
 
-  // Réglages envoyés une seule fois pour le lot entier.
+  // Réglages une seule fois pour tout le lot.
   await m110Send([0x1b, 0x4e, 0x0d, 0x05]);
   await sleep(profile.commandDelay);
   await m110Send([0x1b, 0x4e, 0x04, densityValue]);
@@ -1206,8 +1180,6 @@ async function printRasterBatchM110(rasters, density = 6, onLabelProgress = null
   await sleep(profile.commandDelay);
 
   let totalWrites = 0;
-  let actualChunk = getRememberedM110ChunkSize(profile);
-  let fallbackUsed = false;
 
   for (let labelIndex = 0; labelIndex < list.length; labelIndex++) {
     const raster = list[labelIndex];
@@ -1220,21 +1192,30 @@ async function printRasterBatchM110(rasters, density = 6, onLabelProgress = null
     ]));
 
     const transport = await sendRasterPayloadM110(raster.data, profile);
-    actualChunk = transport.chunkSize;
     totalWrites += transport.writes;
-    fallbackUsed = fallbackUsed || transport.fallbackUsed;
 
     await sleep(profile.beforeFooter);
     await m110Send([0x1f, 0xf0, 0x05, 0x00, 0x1f, 0xf0, 0x03, 0x00]);
 
     const isLast = labelIndex === list.length - 1;
-    await sleep(isLast ? profile.afterFooter : profile.betweenLabels);
+    if (isLast) {
+      await sleep(profile.afterFooter);
+    } else {
+      await sleep(profile.betweenLabels);
+
+      // Pour les lots de plusieurs étiquettes, une micro-pause très courte
+      // toutes les 5 étiquettes empêche le tampon de prendre du retard.
+      const done = labelIndex + 1;
+      if (profile.cooldownEvery && done % profile.cooldownEvery === 0) {
+        await sleep(profile.cooldownMs || 0);
+      }
+    }
 
     if (onLabelProgress) onLabelProgress(labelIndex + 1, list.length);
   }
 
   const elapsedMs = Math.round(performance.now() - startedAt);
-  return { elapsedMs, chunkSize: actualChunk, writes: totalWrites, fallbackUsed };
+  return { elapsedMs, chunkSize: 128, writes: totalWrites };
 }
 
 async function printOneM110(match, trackingValue) {
@@ -1284,9 +1265,8 @@ function queueM110Print(matches, trackingValue) {
       const secondsNum = result.elapsedMs / 1000;
       const seconds = secondsNum.toFixed(1);
       const perLabel = (secondsNum / copy.length).toFixed(2);
-      const fallbackText = result.fallbackUsed ? ' · repli 128 auto' : '';
       setM110Status(`✅ ${copy.length} étiquette(s) en ${seconds} s (${perLabel} s/étiquette) — ${profile.label}.`, 'ok');
-      setM110TransportInfo(`Transport : ${result.chunkSize} octets/paquet · ${result.writes} écritures${fallbackText}.`);
+      setM110TransportInfo(`Transport : 128 octets fixe · ${result.writes} écritures · lot groupé.`);
       if (navigator.vibrate) navigator.vibrate([80, 40, 80]);
     } catch (err) {
       console.error('M110 print error:', err);
@@ -3776,12 +3756,7 @@ window.addEventListener("DOMContentLoaded", () => {
   document.getElementById('customLabelHeight').addEventListener('input', updateLabelSizeUi);
   document.getElementById('m110SpeedProfile').addEventListener('change', () => {
     updateM110SpeedHint();
-    try {
-      if (document.getElementById('m110SpeedProfile')?.value === 'ultra') {
-        localStorage.removeItem(M110_TRANSPORT_CHUNK_KEY);
-        setM110TransportInfo('Transport : Ultra testera 256 octets au prochain lot, avec repli 128 automatique.');
-      }
-    } catch (_) {}
+    setM110TransportInfo('Transport : 128 octets fixe — aucune tentative 256.');
   });
   document.getElementById('m110LayoutProfile').addEventListener('change', updateM110LayoutHint);
   document.getElementById('testM110').addEventListener('click', () => manualPrintM110([makeM110TestMatch()], 'TEST'));
@@ -3789,12 +3764,12 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 // =============================================================
-// V20 — MISE À JOUR / CACHE FIABLE
+// V21 — MISE À JOUR / CACHE FIABLE
 // - le navigateur vérifie toujours la dernière version de sw.js
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "20.0.0";
+const APP_VERSION = "21.0.0";
 try {
   const el = document.getElementById('appVersionText');
   if (el) el.textContent = `v${APP_VERSION}`;
@@ -3829,7 +3804,7 @@ async function installFreshServiceWorker() {
       location.reload();
     });
   } catch (err) {
-    console.warn("Service worker V20 non disponible :", err);
+    console.warn("Service worker V21 non disponible :", err);
   }
 }
 

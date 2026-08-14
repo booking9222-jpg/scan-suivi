@@ -1,0 +1,34 @@
+V21 — M110 ULTRA SÛR 128 (LOTS 1 À 13)
+
+À mettre sur GitHub :
+- index.html
+- sw.js
+
+Aucun changement Google Sheets / Apps Script.
+
+Pourquoi V21 :
+Le test V20 en 256 octets a montré que la M110 pouvait recevoir des données
+corrompues même lorsque Chrome ne signalait aucune erreur. V21 interdit donc
+complètement les paquets 256.
+
+Optimisations conservées :
+- 128 octets fixe ;
+- envoi groupé de toutes les étiquettes du lot ;
+- mini-rafales de 2 paquets ;
+- pauses de transfert courtes ;
+- réglages imprimante envoyés une seule fois par lot ;
+- pause entre étiquettes réduite ;
+- pause finale seulement après la dernière étiquette ;
+- micro-pause toutes les 5 étiquettes pour éviter que le tampon ne prenne du retard ;
+- temps total + temps moyen par étiquette affichés.
+
+Après mise à jour :
+1. Ouvre https://222-ipg.github.io/?v=21
+2. Vérifie « Version actuelle : v21.0.0 »
+3. Connecte la M110
+4. Laisse « ⚡ Ultra sûr 128 — 1 à 13 »
+5. Fais d'abord Test 3 étiquettes.
+6. Si les 3 sont parfaites, teste un vrai lot.
+
+Si ton téléphone/M110 montre encore un saut :
+passe sur « 🚀 Turbo fiable 128 ».
