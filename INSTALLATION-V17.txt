@@ -1,0 +1,19 @@
+V17 — TEXTE NORMAL + ENVOI GROUPÉ M110
+
+À mettre sur GitHub :
+- index.html
+- sw.js
+
+Aucun changement Google Sheets / Apps Script.
+
+Nouveautés :
+1. Le texte de l’étiquette M110 n’est plus en gras.
+2. Le bloc texte utilise plus la partie basse de l’étiquette.
+3. Les étiquettes d’un même lot sont préparées puis envoyées en un seul envoi groupé à la M110, au lieu d’un envoi séparé étiquette par étiquette.
+
+Après mise à jour :
+1. Ouvre https://222-ipg.github.io/?v=17
+2. Connecte la M110
+3. Imprime plusieurs étiquettes à la suite pour tester.
+
+Si tu constates un nouveau problème de recalage, baisse simplement la vitesse Bluetooth sur Normal ou Compatible.

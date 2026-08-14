@@ -277,7 +277,7 @@
 </style>
 </head>
 <body>
-<!-- V15 : code-barres élargi + M110 accélérée -->
+<!-- V17 : texte non gras + envoi groupé M110 -->
 
 <h1>📦 Vine : ouverture → M110 → rangement synchronisé</h1>
 
@@ -993,10 +993,10 @@ function generateM110LabelCanvas(match, trackingValue) {
   const is30High = size.height <= 32;
   const layout = getM110LayoutProfile();
   const side = Math.max(3, Math.round(W * layout.sideRatio));
-  const trackingFont = Math.max(10, Math.min(15, Math.round(H * layout.trackFontRatio)));
-  const asinFont = Math.max(15, Math.min(23, Math.round(H * layout.asinFontRatio)));
-  const codeFont = Math.max(16, Math.min(24, Math.round(H * layout.codeFontRatio)));
-  const titleFont = Math.max(10, Math.min(15, Math.round(H * layout.titleFontRatio)));
+  const trackingFont = Math.max(10, Math.min(14, Math.round(H * layout.trackFontRatio)));
+  const asinFont = Math.max(14, Math.min(21, Math.round(H * (layout.asinFontRatio - 0.004))));
+  const codeFont = Math.max(15, Math.min(22, Math.round(H * (layout.codeFontRatio - 0.004))));
+  const titleFont = Math.max(10, Math.min(14, Math.round(H * layout.titleFontRatio)));
 
   let y = Math.max(trackingFont + 2, Math.round(H * 0.060));
   ctx.textAlign = 'left';
@@ -1036,23 +1036,26 @@ function generateM110LabelCanvas(match, trackingValue) {
   }
   ctx.drawImage(bc, Math.round((W - dw) / 2), barcodeTop, dw, dh);
 
-  y = barcodeTop + dh + Math.max(Math.round(H * 0.050), asinFont - 1);
+  y = barcodeTop + dh + Math.max(Math.round(H * 0.032), asinFont - 4);
   ctx.textAlign = 'center';
-  ctx.font = `bold ${asinFont}px Arial`;
+  ctx.font = `${asinFont}px Arial`;
   ctx.fillText(truncateTextToWidth(ctx, String(match.asin || ''), W - side * 2), W / 2, y);
 
   y += codeFont + Math.max(0, Math.round(H * 0.002));
-  ctx.font = `bold ${codeFont}px Arial`;
+  ctx.font = `${codeFont}px Arial`;
   ctx.fillText(truncateTextToWidth(ctx, barcodeValue, W - side * 2), W / 2, y);
 
-  y += titleFont + Math.max(2, Math.round(H * 0.010));
-  ctx.font = `bold ${titleFont}px Arial`;
+  y += titleFont + Math.max(2, Math.round(H * 0.008));
+  ctx.font = `${titleFont}px Arial`;
   const remaining = Math.max(0, H - y - 3);
   const lineStep = titleFont + 1;
   const maxLinesByRoom = Math.max(1, Math.floor(remaining / lineStep) + 1);
-  const maxLinesWanted = is30High ? layout.titleMax30 : layout.titleMaxOther;
+  const maxLinesWanted = (is30High ? layout.titleMax30 : layout.titleMaxOther) + 1;
   const maxLines = Math.max(1, Math.min(maxLinesWanted, maxLinesByRoom));
   const lines = wrapM110Text(ctx, match.productName || '', W - side * 2, maxLines);
+  const blockHeight = Math.max(0, (lines.length - 1) * lineStep);
+  const extraDown = Math.max(0, H - 4 - y - blockHeight);
+  y += Math.min(extraDown, Math.round(H * 0.10));
   for (const line of lines) {
     if (y > H - 2) break;
     ctx.fillText(line, W / 2, y);
@@ -1062,9 +1065,60 @@ function generateM110LabelCanvas(match, trackingValue) {
   return c;
 }
 
-async function printOneM110(match, trackingValue) {
+function rasterizeM110Match(match, trackingValue) {
   const canvas = generateM110LabelCanvas(match, trackingValue);
-  const raster = m110CanvasToRaster(canvas);
+  return m110CanvasToRaster(canvas);
+}
+
+async function printRasterBatchM110(rasters, density = 6, onLabelProgress = null) {
+  if (!isM110Connected()) throw new Error('M110 non connectée');
+  const list = Array.isArray(rasters) ? rasters : [];
+  if (!list.length) return 0;
+
+  const densityValue = Math.round(5 + Math.max(1, Math.min(8, density)) * 1.25);
+  const profile = getM110SpeedProfile();
+  const startedAt = performance.now();
+
+  // Réglage global une seule fois pour tout le lot.
+  await m110Send([0x1b, 0x4e, 0x0d, 0x05]);
+  await sleep(profile.commandDelay);
+  await m110Send([0x1b, 0x4e, 0x04, densityValue]);
+  await sleep(profile.commandDelay);
+  await m110Send([0x1f, 0x11, 0x0a]);
+  await sleep(profile.commandDelay);
+
+  for (let labelIndex = 0; labelIndex < list.length; labelIndex++) {
+    const raster = list[labelIndex];
+    const h = raster.heightLines;
+    await m110Send(new Uint8Array([
+      0x1d, 0x76, 0x30, 0x00,
+      raster.widthBytes & 0xff, (raster.widthBytes >> 8) & 0xff,
+      h & 0xff, (h >> 8) & 0xff
+    ]));
+
+    const total = raster.data.length;
+    for (let i = 0; i < total; i += M110_BLE.chunkSize) {
+      const chunk = raster.data.slice(i, Math.min(i + M110_BLE.chunkSize, total));
+      await m110Send(chunk);
+      if (profile.chunkDelay > 0) await sleep(profile.chunkDelay);
+    }
+
+    if (onLabelProgress) onLabelProgress(labelIndex + 1, list.length);
+
+    await sleep(profile.beforeFooter);
+    await m110Send([0x1f, 0xf0, 0x05, 0x00, 0x1f, 0xf0, 0x03, 0x00]);
+
+    // Petite pause entre les étiquettes pour le recalage.
+    const isLast = labelIndex === list.length - 1;
+    const pauseAfter = isLast ? profile.afterFooter : Math.max(420, Math.min(profile.afterFooter, Math.round(profile.afterFooter * 0.72)));
+    await sleep(pauseAfter);
+  }
+
+  return Math.round(performance.now() - startedAt);
+}
+
+async function printOneM110(match, trackingValue) {
+  const raster = rasterizeM110Match(match, trackingValue);
   const density = Number(document.getElementById('m110Density')?.value || 6);
   setM110Progress(0, true);
   const elapsedMs = await printRasterM110(raster, density, p => setM110Progress(p, true));
@@ -1095,14 +1149,19 @@ function queueM110Print(matches, trackingValue) {
     try {
       const size = getSelectedLabelSize();
       const profile = getM110SpeedProfile();
-      const batchStart = performance.now();
-      setM110Status(`🖨️ ${copy.length} étiquette(s) — ${size.width}×${size.height} mm — ${profile.label}…`, 'wait');
-      for (let i = 0; i < copy.length; i++) {
-        setM110Status(`🖨️ Étiquette ${i + 1}/${copy.length} — ${profile.label}…`, 'wait');
-        await printOneM110(copy[i], trackingValue);
-      }
-      const seconds = ((performance.now() - batchStart) / 1000).toFixed(1);
-      setM110Status(`✅ ${copy.length} étiquette(s) imprimée(s) en ${seconds} s — ${profile.label}.`, 'ok');
+      const density = Number(document.getElementById('m110Density')?.value || 6);
+      const rasters = copy.map(item => rasterizeM110Match(item, trackingValue));
+      setM110Progress(0, true);
+      setM110Status(`📦 Envoi groupé de ${copy.length} étiquette(s) — ${size.width}×${size.height} mm — ${profile.label}…`, 'wait');
+      const elapsedMs = await printRasterBatchM110(rasters, density, (done, total) => {
+        const pct = Math.round(done / total * 100);
+        setM110Progress(pct, true);
+        setM110Status(`🖨️ Lot M110 : ${done}/${total} envoyée(s) — ${profile.label}…`, 'wait');
+      });
+      setM110Progress(100, true);
+      setTimeout(() => setM110Progress(0, false), 900);
+      const seconds = (elapsedMs / 1000).toFixed(1);
+      setM110Status(`✅ ${copy.length} étiquette(s) envoyée(s) en lot en ${seconds} s — ${profile.label}.`, 'ok');
       if (navigator.vibrate) navigator.vibrate([80, 40, 80]);
     } catch (err) {
       console.error('M110 print error:', err);
@@ -3597,12 +3656,12 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 // =============================================================
-// V15 — MISE À JOUR / CACHE FIABLE
+// V17 — MISE À JOUR / CACHE FIABLE
 // - le navigateur vérifie toujours la dernière version de sw.js
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "15.0.0";
+const APP_VERSION = "17.0.0";
 
 async function installFreshServiceWorker() {
   if (!("serviceWorker" in navigator) || !(location.protocol === "https:" || location.hostname === "localhost")) return;
@@ -3633,7 +3692,7 @@ async function installFreshServiceWorker() {
       location.reload();
     });
   } catch (err) {
-    console.warn("Service worker V15 non disponible :", err);
+    console.warn("Service worker V17 non disponible :", err);
   }
 }
 
