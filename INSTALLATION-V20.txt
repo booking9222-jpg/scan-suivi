@@ -1,0 +1,30 @@
+V20 — M110 ULTRA ADAPTATIF (LOTS 1 À 13)
+
+À mettre sur GitHub :
+- index.html
+- sw.js
+
+Aucun changement Google Sheets / Apps Script.
+
+Améliorations vitesse :
+- nouveau mode ⚡ Ultra 1–13 ;
+- tente automatiquement des paquets Bluetooth de 256 octets au lieu de 128 ;
+- repli automatique à 128 octets si le téléphone refuse 256 ;
+- envoi en mini-rafales de 2 paquets ;
+- pauses de transfert fortement réduites ;
+- pause entre étiquettes réduite ;
+- pause plus longue seulement après la dernière étiquette ;
+- réglages imprimante envoyés une seule fois pour le lot ;
+- affichage du temps total et du temps moyen par étiquette ;
+- mémorisation de la taille de paquet qui fonctionne.
+
+Après mise à jour :
+1. Ouvre https://222-ipg.github.io/?v=20
+2. Vérifie le badge « Version actuelle : v20.0.0 »
+3. Connecte la M110
+4. Choisis « ⚡ Ultra 1–13 — adaptatif »
+5. Fais d'abord un test de 3 étiquettes, puis un vrai lot.
+
+Si tu constates un saut / une étiquette blanche :
+- repasse sur « ⚡ Turbo — fiable ».
+Le reste de la V19 (mise en page, Google Sheets, rangement, recherche, etc.) est conservé.
