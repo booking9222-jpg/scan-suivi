@@ -298,13 +298,34 @@
     color:#0d47a1;
   }
 
+  .github-file-status {
+    margin-top:8px; padding:8px 10px; border-radius:8px;
+    background:#f5f7f8; color:#455a64; border:1px solid #d8dee3;
+    font-size:12px; line-height:1.45;
+  }
+  .github-file-status.ok { background:#e8f5e9; border-color:#a5d6a7; color:#1b5e20; }
+  .github-file-status.wait { background:#fff8e1; border-color:#ffe082; color:#795548; }
+  .github-file-status.err { background:#ffebee; border-color:#ef9a9a; color:#b71c1c; }
+  .github-source-settings {
+    margin-top:10px; padding:8px 10px; border:1px solid #d6e4ff;
+    border-radius:9px; background:#f8fbff;
+  }
+  .github-source-settings summary { cursor:pointer; font-weight:900; color:#174ea6; }
+  .github-settings-grid { display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px; }
+  .github-settings-grid label { font-size:12px;font-weight:800;color:#455a64; }
+  .github-settings-grid input {
+    width:100%; box-sizing:border-box; margin-top:4px; padding:8px;
+    border:1px solid #bbb; border-radius:7px; font-size:12px;
+  }
+  @media (max-width:560px) { .github-settings-grid { grid-template-columns:1fr; } }
+
 </style>
 </head>
 <body>
 <!-- V21 : M110 Ultra sûr 128 octets, optimisé 1-13 -->
 
 <h1>📦 Vine : ouverture → M110 → rangement synchronisé</h1>
-<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v22</strong></div>
+<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v23</strong></div>
 
 <div class="team-workflow-card" id="teamWorkflowCard">
   <div class="team-workflow-title">⚙️ Organisation du travail</div>
@@ -421,9 +442,10 @@
 
 
 <div class="card">
-  <strong>1. Chargez votre export Amazon (Order History) :</strong><br>
+  <strong>1. Order History :</strong><br>
   <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
   <div id="status">Aucun fichier chargé.</div>
+  <div id="githubStatus1" class="github-file-status">☁️ GitHub : vérification automatique en attente…</div>
 </div>
 
 <div class="card">
@@ -436,10 +458,32 @@
 </div>
 
 <div class="card">
-  <strong>2. Chargez un 2e fichier Excel de correspondance :</strong><br>
+  <strong>2. Fichier de correspondance :</strong><br>
   <div style="font-size:13px;color:#555;margin:6px 0 10px;">La colonne A doit contenir l'ASIN, la colonne B le code-barres à utiliser dans le PDF.</div>
   <input type="file" id="fileInput2" accept=".xlsx,.xls,.csv">
   <div id="status2">Aucun 2e fichier chargé.</div>
+  <div id="githubStatus2" class="github-file-status">☁️ GitHub : vérification automatique en attente…</div>
+
+  <details class="github-source-settings">
+    <summary>⚙️ Sources GitHub automatiques</summary>
+    <div class="github-settings-grid">
+      <label>Order History
+        <input id="githubPrimaryPath" type="text" placeholder="Détection automatique">
+      </label>
+      <label>Correspondance
+        <input id="githubSecondaryPath" type="text" placeholder="Détection automatique">
+      </label>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:9px;">
+      <button class="btn" id="githubDetectBtn" type="button">🔎 Détecter sur GitHub</button>
+      <button class="btn" id="githubSavePathsBtn" type="button" style="background:#455a64;">💾 Enregistrer les chemins</button>
+      <button class="btn" id="githubSyncNowBtn" type="button" style="background:#2e7d32;">🔄 Vérifier maintenant</button>
+    </div>
+    <div class="mini-note" style="margin-top:7px;">
+      GitHub est la source prioritaire. Si Internet est indisponible, la dernière copie enregistrée sur ce téléphone reste utilisée.
+      Pour un fonctionnement stable, garde de préférence les mêmes noms de fichiers sur GitHub et remplace leur contenu.
+    </div>
+  </details>
 </div>
 
 <div class="card">
@@ -1533,7 +1577,7 @@ function openFileDb() {
   });
 }
 
-async function saveFileLocally(key, file, arrayBuffer) {
+async function saveFileLocally(key, file, arrayBuffer, extraMeta = {}) {
   try {
     const db = await openFileDb();
     await new Promise((resolve, reject) => {
@@ -1541,7 +1585,13 @@ async function saveFileLocally(key, file, arrayBuffer) {
       tx.objectStore(FILE_STORE_NAME).put({
         name: file.name || "fichier.xlsx",
         type: file.type || "application/octet-stream",
-        lastModified: file.lastModified || Date.now(),
+        lastModified: file.lastModified || extraMeta.lastModified || Date.now(),
+        source: extraMeta.source || "local",
+        githubPath: extraMeta.githubPath || "",
+        githubLastModified: extraMeta.githubLastModified || "",
+        githubEtag: extraMeta.githubEtag || "",
+        githubSize: Number(extraMeta.githubSize || arrayBuffer.byteLength || 0),
+        downloadedAt: extraMeta.downloadedAt || Date.now(),
         data: arrayBuffer
       }, key);
       tx.oncomplete = resolve;
@@ -1567,6 +1617,301 @@ async function getSavedFile(key) {
   } catch (err) {
     console.warn("Impossible de restaurer le fichier :", err);
     return null;
+  }
+}
+
+
+const GITHUB_FILES_CONFIG_KEY = "vine-github-files-v23";
+const GITHUB_OWNER = "222-ipg";
+const GITHUB_REPO = "222-ipg.github.io";
+
+function formatFileDate(value) {
+  if (!value) return "date inconnue";
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return "date inconnue";
+  return d.toLocaleString("fr-FR", {
+    day:"2-digit", month:"2-digit", year:"numeric",
+    hour:"2-digit", minute:"2-digit"
+  });
+}
+
+function basenameFromPath(path) {
+  return String(path || "").split("/").filter(Boolean).pop() || "fichier.xlsx";
+}
+
+function escapeAttr(value) {
+  return String(value || "").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function setGithubFileStatus(which, htmlText, state = "") {
+  const el = document.getElementById(which === "primary" ? "githubStatus1" : "githubStatus2");
+  if (!el) return;
+  el.className = "github-file-status" + (state ? ` ${state}` : "");
+  el.innerHTML = htmlText;
+}
+
+function readGithubFileConfig() {
+  try {
+    return JSON.parse(localStorage.getItem(GITHUB_FILES_CONFIG_KEY) || "{}") || {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function saveGithubFileConfig(config) {
+  try { localStorage.setItem(GITHUB_FILES_CONFIG_KEY, JSON.stringify(config || {})); } catch (_) {}
+}
+
+function fillGithubPathInputs(config = readGithubFileConfig()) {
+  const p1 = document.getElementById("githubPrimaryPath");
+  const p2 = document.getElementById("githubSecondaryPath");
+  if (p1) p1.value = config.primaryPath || "";
+  if (p2) p2.value = config.secondaryPath || "";
+}
+
+function fileMetaHtml(meta = {}) {
+  const source = meta.source === "github" ? "☁️ GitHub" : "💾 Téléphone";
+  const dateValue = meta.githubLastModified || meta.lastModified || "";
+  const dateLabel = meta.source === "github" ? "Dernière mise à jour GitHub" : "Date du fichier";
+  const pathText = meta.githubPath ? ` · <code>${escapeHtml(meta.githubPath)}</code>` : "";
+  return `<div style="margin-top:5px;font-size:12px;color:#455a64;">${source}${pathText}<br>📅 ${dateLabel} : <strong>${escapeHtml(formatFileDate(dateValue))}</strong></div>`;
+}
+
+function scoreGithubPath(path, kind) {
+  const p = String(path || "").toLowerCase();
+  if (!/\.(xlsx|xls|csv)$/i.test(p)) return -9999;
+  let score = 0;
+
+  if (kind === "primary") {
+    if (p.includes("order history")) score += 150;
+    if (p.includes("order_history") || p.includes("order-history")) score += 140;
+    if (p.includes("order") && p.includes("history")) score += 120;
+    if (p.includes("fusion")) score += 80;
+    if (p.includes("amazon")) score += 35;
+    if (p.includes("correspond")) score -= 160;
+    if (p.includes("ean")) score -= 100;
+    if (p.includes("barcode") || p.includes("code-barre") || p.includes("code_barre")) score -= 80;
+  } else {
+    if (p.includes("correspond")) score += 160;
+    if (p.includes("ean")) score += 120;
+    if (p.includes("barcode") || p.includes("code-barre") || p.includes("code_barre")) score += 110;
+    if (p.includes("asin")) score += 55;
+    if (p.includes("light")) score += 25;
+    if (p.includes("order") && p.includes("history")) score -= 180;
+    if (p.includes("fusion")) score -= 60;
+  }
+
+  // Préférence légère pour les dossiers data / fichiers pas trop profondément imbriqués.
+  if (p.startsWith("data/")) score += 15;
+  score -= (p.split("/").length - 1) * 2;
+  return score;
+}
+
+async function listGithubSpreadsheetFiles() {
+  const all = [];
+
+  const fetchFolder = async (path = "") => {
+    const suffix = path ? `/${path.replace(/^\/+|\/+$/g, "")}` : "";
+    const url = `https://api.github.com/repos/${encodeURIComponent(GITHUB_OWNER)}/${encodeURIComponent(GITHUB_REPO)}/contents${suffix}`;
+    const res = await fetch(url, { cache:"no-store", headers:{ "Accept":"application/vnd.github+json" } });
+    if (!res.ok) throw new Error(`GitHub API ${res.status}`);
+    const items = await res.json();
+
+    for (const item of Array.isArray(items) ? items : []) {
+      if (item.type === "file" && /\.(xlsx|xls|csv)$/i.test(item.name || "")) {
+        all.push({ path:item.path, name:item.name, size:item.size || 0 });
+      }
+    }
+
+    return Array.isArray(items) ? items : [];
+  };
+
+  const root = await fetchFolder("");
+  // Cherche aussi les dossiers courants sans parcourir tout le dépôt.
+  const folders = root.filter(x => x.type === "dir" && /^(data|files|fichiers|excel|exports?)$/i.test(x.name || ""));
+  for (const folder of folders.slice(0, 4)) {
+    try { await fetchFolder(folder.path); } catch (_) {}
+  }
+  return all;
+}
+
+async function autoDetectGithubFilePaths(force = false) {
+  let config = readGithubFileConfig();
+  if (!force && config.primaryPath && config.secondaryPath) {
+    fillGithubPathInputs(config);
+    return config;
+  }
+
+  setGithubFileStatus("primary", "☁️ GitHub : recherche du fichier Order History…", "wait");
+  setGithubFileStatus("secondary", "☁️ GitHub : recherche du fichier de correspondance…", "wait");
+
+  const files = await listGithubSpreadsheetFiles();
+  if (!files.length) throw new Error("Aucun fichier .xlsx/.xls/.csv trouvé dans le dépôt GitHub.");
+
+  const primary = files.slice().sort((a,b) => scoreGithubPath(b.path,"primary") - scoreGithubPath(a.path,"primary"))[0];
+  const secondary = files.slice().sort((a,b) => scoreGithubPath(b.path,"secondary") - scoreGithubPath(a.path,"secondary"))[0];
+
+  if (!primary || scoreGithubPath(primary.path,"primary") <= 0) {
+    throw new Error("Impossible d'identifier automatiquement Order History.");
+  }
+  if (!secondary || scoreGithubPath(secondary.path,"secondary") <= 0 || secondary.path === primary.path) {
+    throw new Error("Impossible d'identifier automatiquement le fichier de correspondance.");
+  }
+
+  config = { primaryPath:primary.path, secondaryPath:secondary.path, detectedAt:Date.now() };
+  saveGithubFileConfig(config);
+  fillGithubPathInputs(config);
+  return config;
+}
+
+function githubPagesFileUrl(path, cacheBust = true) {
+  const clean = String(path || "").replace(/^\/+/, "");
+  const url = new URL("/" + clean, location.origin);
+  if (cacheBust) url.searchParams.set("vfile", String(Date.now()));
+  return url.toString();
+}
+
+async function getGithubRemoteMeta(path) {
+  const url = githubPagesFileUrl(path, true);
+  let res;
+  try {
+    res = await fetch(url, { method:"HEAD", cache:"no-store" });
+  } catch (_) {
+    res = null;
+  }
+
+  if (!res || !res.ok) {
+    // Certains hébergeurs répondent mal à HEAD : GET sans consommer le body suffit pour les headers.
+    res = await fetch(url, { method:"GET", cache:"no-store" });
+  }
+  if (!res.ok) throw new Error(`Fichier GitHub inaccessible (${res.status}) : ${path}`);
+
+  return {
+    url,
+    githubPath:path,
+    lastModified:res.headers.get("last-modified") || "",
+    etag:res.headers.get("etag") || "",
+    size:Number(res.headers.get("content-length") || 0)
+  };
+}
+
+function remoteLooksSame(record, remote) {
+  if (!record || !record.data || record.source !== "github") return false;
+  if (record.githubPath !== remote.githubPath) return false;
+
+  if (remote.etag && record.githubEtag) return remote.etag === record.githubEtag;
+  if (remote.lastModified && record.githubLastModified) {
+    const sameDate = remote.lastModified === record.githubLastModified;
+    const sameSize = !remote.size || !record.githubSize || Number(remote.size) === Number(record.githubSize);
+    return sameDate && sameSize;
+  }
+  return false;
+}
+
+async function downloadGithubFile(kind, path, remoteMeta) {
+  const url = githubPagesFileUrl(path, true);
+  const res = await fetch(url, { cache:"no-store" });
+  if (!res.ok) throw new Error(`Téléchargement impossible (${res.status})`);
+  const arrayBuffer = await res.arrayBuffer();
+
+  const lastModifiedHeader = res.headers.get("last-modified") || remoteMeta?.lastModified || "";
+  const etag = res.headers.get("etag") || remoteMeta?.etag || "";
+  const type = res.headers.get("content-type") || "application/octet-stream";
+  const parsedDate = lastModifiedHeader ? new Date(lastModifiedHeader).getTime() : Date.now();
+  const fileName = basenameFromPath(path);
+  const fakeFile = {
+    name:fileName,
+    type,
+    lastModified:Number.isFinite(parsedDate) ? parsedDate : Date.now()
+  };
+
+  const key = kind === "primary" ? "orderHistory" : "correspondence";
+  await saveFileLocally(key, fakeFile, arrayBuffer, {
+    source:"github",
+    githubPath:path,
+    githubLastModified:lastModifiedHeader,
+    githubEtag:etag,
+    githubSize:arrayBuffer.byteLength,
+    downloadedAt:Date.now()
+  });
+
+  return {
+    arrayBuffer,
+    record:{
+      name:fileName,
+      type,
+      lastModified:fakeFile.lastModified,
+      source:"github",
+      githubPath:path,
+      githubLastModified:lastModifiedHeader,
+      githubEtag:etag,
+      githubSize:arrayBuffer.byteLength,
+      downloadedAt:Date.now()
+    }
+  };
+}
+
+async function syncOneGithubFile(kind, path, quiet = false) {
+  const label = kind === "primary" ? "Order History" : "Correspondance";
+  const key = kind === "primary" ? "orderHistory" : "correspondence";
+  const statusKind = kind === "primary" ? "primary" : "secondary";
+
+  if (!path) throw new Error(`Chemin GitHub manquant pour ${label}.`);
+  if (!quiet) setGithubFileStatus(statusKind, `☁️ ${label} : vérification de <code>${escapeHtml(path)}</code>…`, "wait");
+
+  const [remote, saved] = await Promise.all([
+    getGithubRemoteMeta(path),
+    getSavedFile(key)
+  ]);
+
+  if (remoteLooksSame(saved, remote)) {
+    const meta = {
+      source:"github",
+      githubPath:path,
+      githubLastModified:saved.githubLastModified || remote.lastModified,
+      lastModified:saved.lastModified
+    };
+    if (kind === "primary") processPrimaryFileData(saved.data, saved.name || basenameFromPath(path), true, meta);
+    else processSecondFileData(saved.data, saved.name || basenameFromPath(path), true, meta);
+
+    setGithubFileStatus(statusKind,
+      `✅ GitHub à jour : <strong>${escapeHtml(basenameFromPath(path))}</strong><br>📅 Dernière mise à jour : <strong>${escapeHtml(formatFileDate(meta.githubLastModified || meta.lastModified))}</strong>`,
+      "ok");
+    return { changed:false };
+  }
+
+  setGithubFileStatus(statusKind, `⬇️ Nouvelle version GitHub détectée : téléchargement de <strong>${escapeHtml(basenameFromPath(path))}</strong>…`, "wait");
+  const downloaded = await downloadGithubFile(kind, path, remote);
+  const meta = downloaded.record;
+
+  if (kind === "primary") processPrimaryFileData(downloaded.arrayBuffer, meta.name, true, meta);
+  else processSecondFileData(downloaded.arrayBuffer, meta.name, true, meta);
+
+  setGithubFileStatus(statusKind,
+    `✅ Nouvelle version chargée depuis GitHub : <strong>${escapeHtml(meta.name)}</strong><br>📅 Dernière mise à jour : <strong>${escapeHtml(formatFileDate(meta.githubLastModified || meta.lastModified))}</strong>`,
+    "ok");
+  return { changed:true };
+}
+
+let githubFilesSyncRunning = false;
+
+async function syncGithubFiles(forceDetect = false) {
+  if (githubFilesSyncRunning) return;
+  githubFilesSyncRunning = true;
+
+  try {
+    const config = await autoDetectGithubFilePaths(forceDetect);
+    await Promise.all([
+      syncOneGithubFile("primary", config.primaryPath),
+      syncOneGithubFile("secondary", config.secondaryPath)
+    ]);
+  } catch (err) {
+    console.warn("Synchronisation GitHub des fichiers impossible :", err);
+    const msg = escapeHtml(err.message || err);
+    setGithubFileStatus("primary", `⚠️ GitHub non vérifié : ${msg}<br>💾 La copie locale reste utilisable.`, "err");
+    setGithubFileStatus("secondary", `⚠️ GitHub non vérifié : ${msg}<br>💾 La copie locale reste utilisable.`, "err");
+  } finally {
+    githubFilesSyncRunning = false;
   }
 }
 
@@ -1599,7 +1944,7 @@ function detectColumns(headers) {
   return { tCol, aCol, pCol, imgCol };
 }
 
-function processPrimaryFileData(arrayBuffer, fileName = "", restored = false) {
+function processPrimaryFileData(arrayBuffer, fileName = "", restored = false, meta = {}) {
   const data = new Uint8Array(arrayBuffer);
   const workbook = XLSX.read(data, { type: "array" });
   const sheetName = workbook.SheetNames[0];
@@ -1633,7 +1978,7 @@ function processPrimaryFileData(arrayBuffer, fileName = "", restored = false) {
   const restoredText = restored ? " — 💾 restauré automatiquement" : "";
   const fileText = fileName ? ` <span style="color:#555;">(${escapeHtml(fileName)})</span>` : "";
   document.getElementById("status").innerHTML =
-    `✅ ${rows.length} lignes chargées${fileText}. Colonne suivi: "<strong>${headers[tCol]}</strong>", colonne ASIN: "<strong>${headers[aCol]}</strong>"${pColLabel}${imgColLabel}.${restoredText}`;
+    `✅ ${rows.length} lignes chargées${fileText}. Colonne suivi: "<strong>${headers[tCol]}</strong>", colonne ASIN: "<strong>${headers[aCol]}</strong>"${pColLabel}${imgColLabel}.${restoredText}${fileMetaHtml(meta)}`;
   document.getElementById("scanInput").value = "";
   searchByProductTitle(document.getElementById("productTitleSearch").value);
 }
@@ -1641,7 +1986,7 @@ function processPrimaryFileData(arrayBuffer, fileName = "", restored = false) {
 async function handleFile(file, shouldSave = true) {
   try {
     const arrayBuffer = await file.arrayBuffer();
-    processPrimaryFileData(arrayBuffer, file.name, false);
+    processPrimaryFileData(arrayBuffer, file.name, false, { source:"local", lastModified:file.lastModified });
     if (shouldSave) await saveFileLocally("orderHistory", file, arrayBuffer);
     document.getElementById("scanInput").focus();
   } catch (err) {
@@ -1656,6 +2001,30 @@ document.getElementById("fileInput").addEventListener("change", function(e) {
 document.getElementById("fileInput2").addEventListener("change", function(e) {
   if (e.target.files.length > 0) handleSecondFile(e.target.files[0]);
 });
+
+document.getElementById("githubDetectBtn").addEventListener("click", async () => {
+  try {
+    const config = await autoDetectGithubFilePaths(true);
+    fillGithubPathInputs(config);
+    await syncGithubFiles(false);
+  } catch (err) {
+    alert("Détection GitHub impossible : " + (err.message || err));
+  }
+});
+
+document.getElementById("githubSavePathsBtn").addEventListener("click", async () => {
+  const config = {
+    primaryPath: document.getElementById("githubPrimaryPath").value.trim(),
+    secondaryPath: document.getElementById("githubSecondaryPath").value.trim(),
+    detectedAt: Date.now()
+  };
+  saveGithubFileConfig(config);
+  fillGithubPathInputs(config);
+  await syncGithubFiles(false);
+});
+
+document.getElementById("githubSyncNowBtn").addEventListener("click", () => syncGithubFiles(false));
+
 
 function normalizeSearchText(value) {
   return String(value || "")
@@ -1743,7 +2112,7 @@ document.getElementById("clearProductSearch").addEventListener("click", function
   document.getElementById("productTitleSearch").focus();
 });
 
-function processSecondFileData(arrayBuffer, fileName = "", restored = false) {
+function processSecondFileData(arrayBuffer, fileName = "", restored = false, meta = {}) {
   const data = new Uint8Array(arrayBuffer);
   const workbook = XLSX.read(data, { type: "array" });
   const sheetName = workbook.SheetNames[0];
@@ -1769,13 +2138,13 @@ function processSecondFileData(arrayBuffer, fileName = "", restored = false) {
 
   const restoredText = restored ? " — 💾 restauré automatiquement" : "";
   const fileText = fileName ? ` <span style="color:#555;">(${escapeHtml(fileName)})</span>` : "";
-  document.getElementById("status2").innerHTML = `✅ ${secondRows.length} lignes chargées${fileText} dans le 2e fichier. Colonne A = texte contenant l'ASIN, colonne B = code-barres, colonne C facultative = URL photo.${restoredText}`;
+  document.getElementById("status2").innerHTML = `✅ ${secondRows.length} lignes chargées${fileText} dans le 2e fichier. Colonne A = texte contenant l'ASIN, colonne B = code-barres, colonne C facultative = URL photo.${restoredText}${fileMetaHtml(meta)}`;
 }
 
 async function handleSecondFile(file, shouldSave = true) {
   try {
     const arrayBuffer = await file.arrayBuffer();
-    processSecondFileData(arrayBuffer, file.name, false);
+    processSecondFileData(arrayBuffer, file.name, false, { source:"local", lastModified:file.lastModified });
     if (shouldSave) await saveFileLocally("correspondence", file, arrayBuffer);
   } catch (err) {
     document.getElementById("status2").textContent = "❌ Impossible de lire le 2e fichier : " + err;
@@ -1791,7 +2160,7 @@ async function restoreSavedFiles() {
 
   if (primary && primary.data) {
     try {
-      processPrimaryFileData(primary.data, primary.name || "fichier mémorisé", true);
+      processPrimaryFileData(primary.data, primary.name || "fichier mémorisé", true, primary);
     } catch (err) {
       document.getElementById("status").textContent = "⚠️ Fichier mémorisé trouvé mais impossible à restaurer.";
     }
@@ -1799,7 +2168,7 @@ async function restoreSavedFiles() {
 
   if (secondary && secondary.data) {
     try {
-      processSecondFileData(secondary.data, secondary.name || "2e fichier mémorisé", true);
+      processSecondFileData(secondary.data, secondary.name || "2e fichier mémorisé", true, secondary);
     } catch (err) {
       document.getElementById("status2").textContent = "⚠️ 2e fichier mémorisé trouvé mais impossible à restaurer.";
     }
@@ -3905,7 +4274,11 @@ function initStorageMode() {
 
 // Restaure automatiquement les deux fichiers Excel mémorisés après une actualisation.
 window.addEventListener("DOMContentLoaded", () => {
-  restoreSavedFiles();
+  fillGithubPathInputs();
+  restoreSavedFiles().finally(() => {
+    // Affiche immédiatement la copie locale, puis vérifie GitHub en arrière-plan.
+    setTimeout(() => syncGithubFiles(false), 450);
+  });
   restoreLabelSizeUi();
   restoreAutoPrintSingleUi();
   restoreM110SpeedUi();
@@ -3937,12 +4310,12 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 // =============================================================
-// V22 — MISE À JOUR / CACHE FIABLE
+// V23 — MISE À JOUR / CACHE FIABLE
 // - le navigateur vérifie toujours la dernière version de sw.js
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "22.0.0";
+const APP_VERSION = "23.0.0";
 try {
   const el = document.getElementById('appVersionText');
   if (el) el.textContent = `v${APP_VERSION}`;
@@ -3977,7 +4350,7 @@ async function installFreshServiceWorker() {
       location.reload();
     });
   } catch (err) {
-    console.warn("Service worker V22 non disponible :", err);
+    console.warn("Service worker V23 non disponible :", err);
   }
 }
 

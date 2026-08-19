@@ -1,0 +1,30 @@
+V23 — FICHIERS GITHUB AUTOMATIQUES + DATE VISIBLE
+
+À mettre sur GitHub :
+- index.html
+- sw.js
+
+Aucun changement Google Sheets / Apps Script.
+
+Fonctionnement :
+1. Au démarrage, le site restaure immédiatement la dernière copie locale.
+2. Il vérifie ensuite GitHub automatiquement.
+3. Si le fichier GitHub est plus récent, il le télécharge et remplace la copie locale.
+4. Sans Internet, la dernière copie locale continue de fonctionner.
+5. Sous chacun des 2 fichiers sont affichés :
+   - le nom du fichier ;
+   - la source GitHub / téléphone ;
+   - la date du fichier / dernière mise à jour GitHub.
+
+Détection :
+- V23 essaie de détecter automatiquement les fichiers .xlsx/.xls/.csv du dépôt 222-ipg/222-ipg.github.io.
+- Order History est détecté à partir de noms contenant notamment order/history/fusion/amazon.
+- Correspondance est détectée à partir de noms contenant correspondance/EAN/barcode/code-barre/ASIN.
+- Si la détection choisit mal, ouvre « Sources GitHub automatiques » et saisis une fois les chemins exacts.
+- Les chemins sont ensuite mémorisés sur le téléphone.
+
+Conseil :
+Garde les mêmes noms/chemins sur GitHub et remplace simplement les fichiers. La vérification automatique sera alors la plus fiable.
+
+ATTENTION CONFIDENTIALITÉ :
+Tout fichier stocké dans un dépôt GitHub Pages public peut être téléchargé publiquement. N'y mets pas d'adresses, données personnelles ou informations sensibles non nécessaires.
