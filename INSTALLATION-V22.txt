@@ -1,0 +1,26 @@
+V22 — CONNEXION BLUETOOTH RAPIDE M110
+
+À mettre sur GitHub :
+- index.html
+- sw.js
+
+Aucun changement Google Sheets / Apps Script.
+
+Nouveautés :
+- les M110 déjà autorisées au site apparaissent directement sous forme de bouton ;
+- ex. « 🔵 M110-XXXX » ;
+- un clic sur ce bouton reconnecte directement la M110 sans ouvrir le sélecteur ;
+- si une seule M110 est déjà autorisée, le site tente aussi une reconnexion silencieuse au chargement ;
+- après une coupure involontaire, une tentative de reconnexion automatique est effectuée ;
+- le bouton normal « Connecter la M110 » reste disponible pour la première autorisation ou un changement d'imprimante.
+
+IMPORTANT :
+La toute première fois, Chrome impose toujours l'autorisation via son sélecteur Web Bluetooth.
+Après cette autorisation, navigator.bluetooth.getDevices() permet au site de récupérer les appareils
+déjà autorisés pour ce domaine.
+
+Après mise à jour :
+1. Ouvre https://222-ipg.github.io/?v=22
+2. Vérifie « Version actuelle : v22.0.0 »
+3. Si ta M110 a déjà été autorisée, son nom doit apparaître dans « Connexion rapide ».
+4. Touche son nom pour la connecter directement.

@@ -277,13 +277,34 @@
   .app-version-badge { display:inline-block; margin:-2px 0 12px; padding:7px 12px; border-radius:999px; background:#eef4ff; color:#174ea6; font-weight:800; font-size:13px; border:1px solid #c9dafc; }
   .app-version-badge strong { font-weight:900; }
 
+  .m110-known-device-btn {
+    border:2px solid #1565c0;
+    background:#fff;
+    color:#0d47a1;
+    border-radius:10px;
+    padding:10px 13px;
+    font-size:14px;
+    font-weight:900;
+    cursor:pointer;
+    box-shadow:0 1px 2px rgba(0,0,0,.08);
+  }
+  .m110-known-device-btn.connected {
+    background:#2e7d32;
+    color:#fff;
+    border-color:#2e7d32;
+  }
+  .m110-known-device-btn.connecting {
+    background:#e3f2fd;
+    color:#0d47a1;
+  }
+
 </style>
 </head>
 <body>
 <!-- V21 : M110 Ultra sûr 128 octets, optimisé 1-13 -->
 
 <h1>📦 Vine : ouverture → M110 → rangement synchronisé</h1>
-<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v21</strong></div>
+<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v22</strong></div>
 
 <div class="team-workflow-card" id="teamWorkflowCard">
   <div class="team-workflow-title">⚙️ Organisation du travail</div>
@@ -320,6 +341,11 @@
     <button class="btn printer-btn disconnect" id="disconnectM110" style="display:none;">Déconnecter</button>
   </div>
   <div id="m110Status" class="printer-status wait">M110 non connectée.</div>
+  <div id="m110KnownDevices" style="margin-top:10px; display:none;">
+    <div style="font-size:12px;font-weight:900;color:#455a64;margin-bottom:6px;">⚡ Connexion rapide :</div>
+    <div id="m110KnownDevicesList" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+    <div class="mini-note" style="margin-top:6px;">Une imprimante déjà autorisée par ce site peut être reconnectée directement en touchant son nom, sans repasser par le sélecteur Bluetooth.</div>
+  </div>
   <div class="print-progress" id="m110Progress"><div id="m110ProgressBar"></div></div>
 
   <div style="margin-top:14px;"><strong>📐 Taille de l'étiquette</strong></div>
@@ -803,6 +829,172 @@ function updateM110Buttons() {
   if (b1) b1.style.display = connected ? 'none' : 'inline-block';
   if (b2) b2.style.display = connected ? 'none' : 'inline-block';
   if (bd) bd.style.display = connected ? 'inline-block' : 'none';
+  updateKnownM110ButtonsVisual();
+}
+
+
+let m110KnownDevicesCache = [];
+let m110ReconnectTimer = null;
+
+function isLikelyM110Device(device) {
+  const name = String(device?.name || '').toLowerCase();
+  return name.includes('m110') || name.includes('m120') || name.includes('phomemo');
+}
+
+function updateKnownM110ButtonsVisual() {
+  const list = document.getElementById('m110KnownDevicesList');
+  if (!list) return;
+  list.querySelectorAll('.m110-known-device-btn').forEach(btn => {
+    const id = btn.dataset.deviceId || '';
+    const active = !!(m110Device && m110Device.id === id && isM110Connected());
+    btn.classList.toggle('connected', active);
+    if (active) btn.textContent = `✅ ${btn.dataset.deviceName || 'M110'} — connectée`;
+    else btn.textContent = `🔵 ${btn.dataset.deviceName || 'M110'}`;
+  });
+}
+
+async function refreshKnownM110Devices() {
+  const wrap = document.getElementById('m110KnownDevices');
+  const list = document.getElementById('m110KnownDevicesList');
+  if (!wrap || !list) return [];
+
+  if (!navigator.bluetooth || typeof navigator.bluetooth.getDevices !== 'function') {
+    wrap.style.display = 'none';
+    return [];
+  }
+
+  try {
+    const devices = await navigator.bluetooth.getDevices();
+    const known = devices.filter(isLikelyM110Device);
+    m110KnownDevicesCache = known;
+    list.innerHTML = '';
+
+    if (!known.length) {
+      wrap.style.display = 'none';
+      return [];
+    }
+
+    wrap.style.display = 'block';
+    for (const device of known) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'm110-known-device-btn';
+      btn.dataset.deviceId = device.id || '';
+      btn.dataset.deviceName = device.name || 'M110';
+      btn.textContent = `🔵 ${device.name || 'M110'}`;
+      btn.addEventListener('click', async () => {
+        btn.classList.add('connecting');
+        btn.textContent = `⏳ ${device.name || 'M110'}…`;
+        await connectKnownM110(device);
+        btn.classList.remove('connecting');
+        updateKnownM110ButtonsVisual();
+      });
+      list.appendChild(btn);
+    }
+
+    updateKnownM110ButtonsVisual();
+    return known;
+  } catch (err) {
+    console.warn('Impossible de lire les périphériques Bluetooth déjà autorisés :', err);
+    wrap.style.display = 'none';
+    return [];
+  }
+}
+
+function bindM110DisconnectListener(device) {
+  if (!device || device.__vineM110DisconnectBound) return;
+  device.__vineM110DisconnectBound = true;
+
+  device.addEventListener('gattserverdisconnected', () => {
+    m110Server = null;
+    m110Service = null;
+    m110WriteChar = null;
+    setM110Status(`⚠️ ${device.name || 'M110'} déconnectée. Touchez son nom pour reconnecter.`, 'err');
+    setM110Progress(0, false);
+    updateM110Buttons();
+    refreshKnownM110Devices();
+
+    // Une seule tentative silencieuse après une coupure involontaire.
+    clearTimeout(m110ReconnectTimer);
+    m110ReconnectTimer = setTimeout(async () => {
+      if (!isM110Connected() && document.visibilityState === 'visible') {
+        try {
+          await connectKnownM110(device, true);
+        } catch (_) {}
+      }
+    }, 1200);
+  });
+}
+
+async function finishM110Connection(device, silent = false) {
+  if (!device) throw new Error('Imprimante Bluetooth introuvable.');
+
+  m110Device = device;
+  bindM110DisconnectListener(device);
+
+  if (!silent) setM110Status(`Connexion directe à ${device.name || 'M110'}…`, 'wait');
+
+  m110Server = device.gatt.connected ? device.gatt : await device.gatt.connect();
+  await sleep(100);
+
+  m110Service = null;
+  m110WriteChar = null;
+  let lastError = null;
+
+  for (const serviceUuid of M110_BLE.services) {
+    try {
+      const service = await m110Server.getPrimaryService(serviceUuid);
+      let writeChar = null;
+      try {
+        writeChar = await service.getCharacteristic(M110_BLE.preferredWriteCharacteristic);
+      } catch (_) {
+        const chars = await service.getCharacteristics();
+        writeChar = chars.find(c => c.properties.writeWithoutResponse || c.properties.write) || null;
+      }
+
+      if (writeChar) {
+        m110Service = service;
+        m110WriteChar = writeChar;
+        m110UseWriteWithResponse = !writeChar.properties.writeWithoutResponse && !!writeChar.properties.write;
+        break;
+      }
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  if (!m110WriteChar) {
+    throw new Error('Service Bluetooth compatible introuvable' + (lastError ? ` (${lastError.message})` : ''));
+  }
+
+  setM110Status(`✅ ${device.name || 'M110'} connectée — prête à imprimer`, 'ok');
+  updateM110Buttons();
+  refreshKnownM110Devices();
+  return true;
+}
+
+async function connectKnownM110(device, silent = false) {
+  try {
+    if (!device) throw new Error('Imprimante non disponible.');
+    if (isM110Connected() && m110Device?.id === device.id) {
+      setM110Status(`✅ ${device.name || 'M110'} déjà connectée`, 'ok');
+      return true;
+    }
+    return await finishM110Connection(device, silent);
+  } catch (err) {
+    console.error('Connexion rapide M110 impossible :', err);
+    if (!silent) setM110Status('❌ Connexion rapide impossible : ' + (err.message || err), 'err');
+    updateM110Buttons();
+    return false;
+  }
+}
+
+async function connectFirstKnownM110() {
+  const devices = await refreshKnownM110Devices();
+  if (devices.length === 1 && !isM110Connected()) {
+    return connectKnownM110(devices[0], true);
+  }
+  return false;
 }
 
 async function connectM110(showAll = false) {
@@ -812,7 +1004,14 @@ async function connectM110(showAll = false) {
   }
 
   try {
-    setM110Status('Recherche de la M110…', 'wait');
+    // Avant d'ouvrir le sélecteur, tente les imprimantes déjà autorisées.
+    const known = await refreshKnownM110Devices();
+    if (!showAll && known.length === 1) {
+      const ok = await connectKnownM110(known[0]);
+      if (ok) return true;
+    }
+
+    setM110Status('Sélectionnez la M110 une seule fois…', 'wait');
     const requestOptions = showAll ? {
       acceptAllDevices: true,
       optionalServices: M110_BLE.services
@@ -825,55 +1024,22 @@ async function connectM110(showAll = false) {
       optionalServices: M110_BLE.services
     };
 
-    m110Device = await navigator.bluetooth.requestDevice(requestOptions);
-    if (!m110Device) throw new Error('Aucune imprimante sélectionnée.');
+    const selectedDevice = await navigator.bluetooth.requestDevice(requestOptions);
+    if (!selectedDevice) throw new Error('Aucune imprimante sélectionnée.');
 
-    m110Device.addEventListener('gattserverdisconnected', () => {
-      m110Server = null;
-      m110Service = null;
-      m110WriteChar = null;
-      setM110Status('⚠️ M110 déconnectée. Appuyez sur Connecter pour reprendre.', 'err');
-      setM110Progress(0, false);
-      updateM110Buttons();
-    });
-
-    setM110Status(`Connexion à ${m110Device.name || 'M110'}…`, 'wait');
-    m110Server = await m110Device.gatt.connect();
-    await sleep(150);
-
-    let lastError = null;
-    for (const serviceUuid of M110_BLE.services) {
-      try {
-        const service = await m110Server.getPrimaryService(serviceUuid);
-        let writeChar = null;
-        try {
-          writeChar = await service.getCharacteristic(M110_BLE.preferredWriteCharacteristic);
-        } catch (_) {
-          const chars = await service.getCharacteristics();
-          writeChar = chars.find(c => c.properties.writeWithoutResponse || c.properties.write) || null;
-        }
-        if (writeChar) {
-          m110Service = service;
-          m110WriteChar = writeChar;
-          m110UseWriteWithResponse = !writeChar.properties.writeWithoutResponse && !!writeChar.properties.write;
-          break;
-        }
-      } catch (err) {
-        lastError = err;
-      }
-    }
-
-    if (!m110WriteChar) {
-      throw new Error('Service Bluetooth compatible introuvable' + (lastError ? ` (${lastError.message})` : ''));
-    }
-
-    setM110Status(`✅ ${m110Device.name || 'M110'} connectée — prête à imprimer`, 'ok');
-    updateM110Buttons();
-    return true;
+    const ok = await finishM110Connection(selectedDevice);
+    await refreshKnownM110Devices();
+    return ok;
   } catch (err) {
     console.error('M110 connect error:', err);
-    setM110Status('❌ Connexion M110 impossible : ' + (err.message || err), 'err');
+
+    if (err && (err.name === 'NotFoundError' || String(err.message || '').includes('User cancelled'))) {
+      setM110Status('ℹ️ Sélection annulée. Si la M110 est déjà autorisée, touchez directement son nom dans « Connexion rapide ».', 'wait');
+    } else {
+      setM110Status('❌ Connexion M110 impossible : ' + (err.message || err), 'err');
+    }
     updateM110Buttons();
+    refreshKnownM110Devices();
     return false;
   }
 }
@@ -885,9 +1051,10 @@ function disconnectM110() {
   m110Server = null;
   m110Service = null;
   m110WriteChar = null;
-  setM110Status('M110 non connectée.', 'wait');
+  setM110Status('M110 non connectée. Touchez son nom dans « Connexion rapide » pour reconnecter.', 'wait');
   setM110Progress(0, false);
   updateM110Buttons();
+  refreshKnownM110Devices();
 }
 
 async function m110Send(bytes) {
@@ -3744,6 +3911,9 @@ window.addEventListener("DOMContentLoaded", () => {
   restoreM110SpeedUi();
   restoreM110LayoutUi();
   updateM110Buttons();
+  refreshKnownM110Devices();
+  // Si une seule M110 a déjà été autorisée, tente une reconnexion discrète.
+  setTimeout(() => connectFirstKnownM110(), 350);
   initStorageMode();
   initCloudSync();
   initTeamWorkflow();
@@ -3761,15 +3931,18 @@ window.addEventListener("DOMContentLoaded", () => {
   document.getElementById('m110LayoutProfile').addEventListener('change', updateM110LayoutHint);
   document.getElementById('testM110').addEventListener('click', () => manualPrintM110([makeM110TestMatch()], 'TEST'));
   document.getElementById('testM110Burst').addEventListener('click', testM110Burst);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refreshKnownM110Devices();
+  });
 });
 
 // =============================================================
-// V21 — MISE À JOUR / CACHE FIABLE
+// V22 — MISE À JOUR / CACHE FIABLE
 // - le navigateur vérifie toujours la dernière version de sw.js
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "21.0.0";
+const APP_VERSION = "22.0.0";
 try {
   const el = document.getElementById('appVersionText');
   if (el) el.textContent = `v${APP_VERSION}`;
@@ -3804,7 +3977,7 @@ async function installFreshServiceWorker() {
       location.reload();
     });
   } catch (err) {
-    console.warn("Service worker V21 non disponible :", err);
+    console.warn("Service worker V22 non disponible :", err);
   }
 }
 
