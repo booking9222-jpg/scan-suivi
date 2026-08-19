@@ -325,7 +325,7 @@
 <!-- V21 : M110 Ultra sûr 128 octets, optimisé 1-13 -->
 
 <h1>📦 Vine : ouverture → M110 → rangement synchronisé</h1>
-<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v23</strong></div>
+<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v24</strong></div>
 
 <div class="team-workflow-card" id="teamWorkflowCard">
   <div class="team-workflow-title">⚙️ Organisation du travail</div>
@@ -357,15 +357,16 @@
 <div class="card printer-card" id="m110Card">
   <strong>🖨️ Phomemo M110 — impression Bluetooth directe</strong>
   <div class="printer-row">
-    <button class="btn printer-btn" id="connectM110">🔵 Connecter la M110</button>
-    <button class="btn printer-btn secondary" id="connectM110All">🔎 Connexion avancée</button>
+    <button class="btn printer-btn" id="connectM110">🔵 Trouver / connecter la M110</button>
+    <button class="btn printer-btn secondary" id="connectM110All">📡 Afficher tous les appareils Bluetooth</button>
     <button class="btn printer-btn disconnect" id="disconnectM110" style="display:none;">Déconnecter</button>
   </div>
   <div id="m110Status" class="printer-status wait">M110 non connectée.</div>
   <div id="m110KnownDevices" style="margin-top:10px; display:none;">
     <div style="font-size:12px;font-weight:900;color:#455a64;margin-bottom:6px;">⚡ Connexion rapide :</div>
     <div id="m110KnownDevicesList" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
-    <div class="mini-note" style="margin-top:6px;">Une imprimante déjà autorisée par ce site peut être reconnectée directement en touchant son nom, sans repasser par le sélecteur Bluetooth.</div>
+    <div id="m110LastDeviceInfo" class="mini-note" style="margin-top:6px;color:#0d47a1;font-weight:800;"></div>
+    <div class="mini-note" style="margin-top:6px;">Les appareils déjà autorisés à ce site sont affichés ici. Touchez directement le nom de la M110. La dernière imprimante utilisée est prioritaire et bénéficie de plusieurs tentatives automatiques de reconnexion.</div>
   </div>
   <div class="print-progress" id="m110Progress"><div id="m110ProgressBar"></div></div>
 
@@ -877,24 +878,87 @@ function updateM110Buttons() {
 }
 
 
+
 let m110KnownDevicesCache = [];
 let m110ReconnectTimer = null;
+const M110_LAST_DEVICE_KEY = 'vine-m110-last-device-v24';
+
+function readLastM110Device() {
+  try { return JSON.parse(localStorage.getItem(M110_LAST_DEVICE_KEY) || "{}") || {}; }
+  catch (_) { return {}; }
+}
+
+function rememberLastM110Device(device) {
+  if (!device) return;
+  try {
+    localStorage.setItem(M110_LAST_DEVICE_KEY, JSON.stringify({
+      id: device.id || "",
+      name: device.name || "M110",
+      savedAt: Date.now()
+    }));
+  } catch (_) {}
+  updateM110LastDeviceInfo();
+}
+
+function updateM110LastDeviceInfo() {
+  const el = document.getElementById('m110LastDeviceInfo');
+  if (!el) return;
+  const last = readLastM110Device();
+  if (last.id || last.name) {
+    el.textContent = `⭐ Dernière imprimante : ${last.name || 'M110'}`;
+  } else {
+    el.textContent = '';
+  }
+}
 
 function isLikelyM110Device(device) {
   const name = String(device?.name || '').toLowerCase();
-  return name.includes('m110') || name.includes('m120') || name.includes('phomemo');
+  return name.includes('m110') ||
+         name.includes('m120') ||
+         name.includes('m220') ||
+         name.includes('phomemo') ||
+         name.includes('label') ||
+         name.includes('printer');
+}
+
+function sortKnownM110Devices(devices) {
+  const last = readLastM110Device();
+  return devices.slice().sort((a, b) => {
+    const aLast = last.id && a.id === last.id ? 1 : 0;
+    const bLast = last.id && b.id === last.id ? 1 : 0;
+    if (aLast !== bLast) return bLast - aLast;
+
+    const aLikely = isLikelyM110Device(a) ? 1 : 0;
+    const bLikely = isLikelyM110Device(b) ? 1 : 0;
+    if (aLikely !== bLikely) return bLikely - aLikely;
+
+    return String(a.name || '').localeCompare(String(b.name || ''));
+  });
 }
 
 function updateKnownM110ButtonsVisual() {
   const list = document.getElementById('m110KnownDevicesList');
   if (!list) return;
+  const last = readLastM110Device();
+
   list.querySelectorAll('.m110-known-device-btn').forEach(btn => {
     const id = btn.dataset.deviceId || '';
     const active = !!(m110Device && m110Device.id === id && isM110Connected());
+    const isLast = !!(last.id && id === last.id);
+    const baseName = btn.dataset.deviceName || 'Appareil Bluetooth';
+
     btn.classList.toggle('connected', active);
-    if (active) btn.textContent = `✅ ${btn.dataset.deviceName || 'M110'} — connectée`;
-    else btn.textContent = `🔵 ${btn.dataset.deviceName || 'M110'}`;
+
+    if (active) {
+      btn.textContent = `✅ ${baseName} — connectée`;
+    } else if (isLast) {
+      btn.textContent = `⭐ ${baseName} — reconnecter`;
+    } else {
+      btn.textContent = `🔵 ${baseName}`;
+    }
   });
+
+  updateM110LastDeviceInfo();
 }
 
 async function refreshKnownM110Devices() {
@@ -902,42 +966,47 @@ async function refreshKnownM110Devices() {
   const list = document.getElementById('m110KnownDevicesList');
   if (!wrap || !list) return [];
 
+  updateM110LastDeviceInfo();
+
   if (!navigator.bluetooth || typeof navigator.bluetooth.getDevices !== 'function') {
     wrap.style.display = 'none';
     return [];
   }
 
   try {
-    const devices = await navigator.bluetooth.getDevices();
-    const known = devices.filter(isLikelyM110Device);
-    m110KnownDevicesCache = known;
+    // IMPORTANT V24 : on ne filtre plus uniquement sur le nom "M110".
+    // Certains firmwares exposent un nom Bluetooth différent.
+    const devices = sortKnownM110Devices(await navigator.bluetooth.getDevices());
+    m110KnownDevicesCache = devices;
     list.innerHTML = '';
 
-    if (!known.length) {
+    if (!devices.length) {
       wrap.style.display = 'none';
       return [];
     }
 
     wrap.style.display = 'block';
-    for (const device of known) {
+
+    for (const device of devices) {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'm110-known-device-btn';
       btn.dataset.deviceId = device.id || '';
-      btn.dataset.deviceName = device.name || 'M110';
-      btn.textContent = `🔵 ${device.name || 'M110'}`;
+      btn.dataset.deviceName = device.name || 'Appareil Bluetooth';
+
       btn.addEventListener('click', async () => {
         btn.classList.add('connecting');
-        btn.textContent = `⏳ ${device.name || 'M110'}…`;
-        await connectKnownM110(device);
+        btn.textContent = `⏳ ${device.name || 'Appareil Bluetooth'}…`;
+        await connectKnownM110(device, false, 3);
         btn.classList.remove('connecting');
         updateKnownM110ButtonsVisual();
       });
+
       list.appendChild(btn);
     }
 
     updateKnownM110ButtonsVisual();
-    return known;
+    return devices;
   } catch (err) {
     console.warn('Impossible de lire les périphériques Bluetooth déjà autorisés :', err);
     wrap.style.display = 'none';
@@ -953,42 +1022,32 @@ function bindM110DisconnectListener(device) {
     m110Server = null;
     m110Service = null;
     m110WriteChar = null;
-    setM110Status(`⚠️ ${device.name || 'M110'} déconnectée. Touchez son nom pour reconnecter.`, 'err');
+    setM110Status(`⚠️ ${device.name || 'M110'} déconnectée — reconnexion automatique…`, 'wait');
     setM110Progress(0, false);
     updateM110Buttons();
     refreshKnownM110Devices();
 
-    // Une seule tentative silencieuse après une coupure involontaire.
     clearTimeout(m110ReconnectTimer);
     m110ReconnectTimer = setTimeout(async () => {
       if (!isM110Connected() && document.visibilityState === 'visible') {
-        try {
-          await connectKnownM110(device, true);
-        } catch (_) {}
+        await connectKnownM110(device, true, 3);
       }
-    }, 1200);
+    }, 900);
   });
 }
 
-async function finishM110Connection(device, silent = false) {
-  if (!device) throw new Error('Imprimante Bluetooth introuvable.');
-
-  m110Device = device;
-  bindM110DisconnectListener(device);
-
-  if (!silent) setM110Status(`Connexion directe à ${device.name || 'M110'}…`, 'wait');
-
-  m110Server = device.gatt.connected ? device.gatt : await device.gatt.connect();
-  await sleep(100);
-
+async function discoverM110WriteCharacteristic(device) {
+  m110Server = device.gatt;
   m110Service = null;
   m110WriteChar = null;
+
   let lastError = null;
 
   for (const serviceUuid of M110_BLE.services) {
     try {
       const service = await m110Server.getPrimaryService(serviceUuid);
       let writeChar = null;
+
       try {
         writeChar = await service.getCharacteristic(M110_BLE.preferredWriteCharacteristic);
       } catch (_) {
@@ -999,88 +1058,94 @@ async function finishM110Connection(device, silent = false) {
       if (writeChar) {
         m110Service = service;
         m110WriteChar = writeChar;
-        m110UseWriteWithResponse = !writeChar.properties.writeWithoutResponse && !!writeChar.properties.write;
-        break;
+        m110UseWriteWithResponse =
+          !writeChar.properties.writeWithoutResponse && !!writeChar.properties.write;
+        return true;
       }
     } catch (err) {
       lastError = err;
     }
   }
 
-  if (!m110WriteChar) {
-    throw new Error('Service Bluetooth compatible introuvable' + (lastError ? ` (${lastError.message})` : ''));
-  }
-
-  setM110Status(`✅ ${device.name || 'M110'} connectée — prête à imprimer`, 'ok');
-  updateM110Buttons();
-  refreshKnownM110Devices();
-  return true;
+  throw new Error(
+    'Service Bluetooth compatible introuvable' +
+    (lastError ? ` (${lastError.message || lastError})` : '')
+  );
 }
 
-async function connectKnownM110(device, silent = false) {
+async function finishM110Connection(device, silent = false, maxAttempts = 3) {
+  if (!device) throw new Error('Imprimante Bluetooth introuvable.');
+
+  m110Device = device;
+  bindM110DisconnectListener(device);
+
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= Math.max(1, maxAttempts); attempt++) {
+    try {
+      if (!silent) {
+        setM110Status(
+          `Connexion à ${device.name || 'M110'} — tentative ${attempt}/${maxAttempts}…`,
+          'wait'
+        );
+      }
+
+      // V24 : force une vraie session GATT neuve en cas de connexion Android "fantôme".
+      try {
+        if (device.gatt?.connected) {
+          device.gatt.disconnect();
+          await sleep(180);
+        }
+      } catch (_) {}
+
+      m110Server = await device.gatt.connect();
+      await sleep(220 + (attempt - 1) * 120);
+
+      await discoverM110WriteCharacteristic(device);
+
+      rememberLastM110Device(device);
+      setM110Status(`✅ ${device.name || 'M110'} connectée — prête à imprimer`, 'ok');
+      updateM110Buttons();
+      refreshKnownM110Devices();
+      return true;
+    } catch (err) {
+      lastError = err;
+      console.warn(`Tentative M110 ${attempt}/${maxAttempts} échouée :`, err);
+
+      m110Service = null;
+      m110WriteChar = null;
+      m110Server = null;
+
+      try {
+        if (device.gatt?.connected) device.gatt.disconnect();
+      } catch (_) {}
+
+      if (attempt < maxAttempts) {
+        await sleep(350 + attempt * 250);
+      }
+    }
+  }
+
+  throw lastError || new Error('Connexion M110 impossible.');
+}
+
+async function connectKnownM110(device, silent = false, maxAttempts = 3) {
   try {
     if (!device) throw new Error('Imprimante non disponible.');
+
     if (isM110Connected() && m110Device?.id === device.id) {
       setM110Status(`✅ ${device.name || 'M110'} déjà connectée`, 'ok');
       return true;
     }
-    return await finishM110Connection(device, silent);
+
+    return await finishM110Connection(device, silent, maxAttempts);
   } catch (err) {
     console.error('Connexion rapide M110 impossible :', err);
-    if (!silent) setM110Status('❌ Connexion rapide impossible : ' + (err.message || err), 'err');
-    updateM110Buttons();
-    return false;
-  }
-}
-
-async function connectFirstKnownM110() {
-  const devices = await refreshKnownM110Devices();
-  if (devices.length === 1 && !isM110Connected()) {
-    return connectKnownM110(devices[0], true);
-  }
-  return false;
-}
-
-async function connectM110(showAll = false) {
-  if (!('bluetooth' in navigator)) {
-    setM110Status('❌ Web Bluetooth indisponible. Utilisez Chrome/Edge Android avec la page en HTTPS.', 'err');
-    return false;
-  }
-
-  try {
-    // Avant d'ouvrir le sélecteur, tente les imprimantes déjà autorisées.
-    const known = await refreshKnownM110Devices();
-    if (!showAll && known.length === 1) {
-      const ok = await connectKnownM110(known[0]);
-      if (ok) return true;
-    }
-
-    setM110Status('Sélectionnez la M110 une seule fois…', 'wait');
-    const requestOptions = showAll ? {
-      acceptAllDevices: true,
-      optionalServices: M110_BLE.services
-    } : {
-      filters: [
-        { namePrefix: 'M110' },
-        { namePrefix: 'M120' },
-        { namePrefix: 'Phomemo' }
-      ],
-      optionalServices: M110_BLE.services
-    };
-
-    const selectedDevice = await navigator.bluetooth.requestDevice(requestOptions);
-    if (!selectedDevice) throw new Error('Aucune imprimante sélectionnée.');
-
-    const ok = await finishM110Connection(selectedDevice);
-    await refreshKnownM110Devices();
-    return ok;
-  } catch (err) {
-    console.error('M110 connect error:', err);
-
-    if (err && (err.name === 'NotFoundError' || String(err.message || '').includes('User cancelled'))) {
-      setM110Status('ℹ️ Sélection annulée. Si la M110 est déjà autorisée, touchez directement son nom dans « Connexion rapide ».', 'wait');
-    } else {
-      setM110Status('❌ Connexion M110 impossible : ' + (err.message || err), 'err');
+    if (!silent) {
+      setM110Status(
+        `❌ Connexion à ${device.name || 'M110'} impossible après plusieurs tentatives : ${err.message || err}`,
+        'err'
+      );
     }
     updateM110Buttons();
     refreshKnownM110Devices();
@@ -1088,7 +1153,83 @@ async function connectM110(showAll = false) {
   }
 }
 
+async function connectFirstKnownM110() {
+  const devices = await refreshKnownM110Devices();
+  if (!devices.length || isM110Connected()) return false;
+
+  const last = readLastM110Device();
+  const preferred =
+    (last.id && devices.find(d => d.id === last.id)) ||
+    devices.find(isLikelyM110Device) ||
+    (devices.length === 1 ? devices[0] : null);
+
+  if (!preferred) return false;
+  return connectKnownM110(preferred, true, 2);
+}
+
+async function connectM110(showAll = false) {
+  if (!('bluetooth' in navigator)) {
+    setM110Status(
+      '❌ Web Bluetooth indisponible. Utilisez Chrome/Edge Android avec la page en HTTPS.',
+      'err'
+    );
+    return false;
+  }
+
+  try {
+    // D'abord, essaie la dernière imprimante déjà autorisée sans sélecteur.
+    if (!showAll) {
+      const known = await refreshKnownM110Devices();
+      const last = readLastM110Device();
+
+      const preferred =
+        (last.id && known.find(d => d.id === last.id)) ||
+        known.find(isLikelyM110Device) ||
+        (known.length === 1 ? known[0] : null);
+
+      if (preferred) {
+        const ok = await connectKnownM110(preferred, false, 3);
+        if (ok) return true;
+      }
+    }
+
+    // V24 : acceptAllDevices évite de manquer une M110 dont le nom Bluetooth
+    // ne correspond pas exactement à "M110" / "Phomemo".
+    setM110Status('Choisissez votre M110 dans la liste Bluetooth…', 'wait');
+
+    const selectedDevice = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: M110_BLE.services
+    });
+
+    if (!selectedDevice) throw new Error('Aucune imprimante sélectionnée.');
+
+    const ok = await finishM110Connection(selectedDevice, false, 3);
+    await refreshKnownM110Devices();
+    return ok;
+  } catch (err) {
+    console.error('M110 connect error:', err);
+
+    if (err && (
+      err.name === 'NotFoundError' ||
+      String(err.message || '').includes('User cancelled')
+    )) {
+      setM110Status(
+        'ℹ️ Sélection annulée. Si la M110 apparaît dans « Connexion rapide », touchez directement son nom.',
+        'wait'
+      );
+    } else {
+      setM110Status('❌ Connexion M110 impossible : ' + (err.message || err), 'err');
+    }
+
+    updateM110Buttons();
+    refreshKnownM110Devices();
+    return false;
+  }
+}
+
 function disconnectM110() {
+  clearTimeout(m110ReconnectTimer);
   try {
     if (m110Device?.gatt?.connected) m110Device.gatt.disconnect();
   } catch (_) {}
@@ -1375,58 +1516,99 @@ function rasterizeM110Match(match, trackingValue) {
 
 async function printRasterBatchM110(rasters, density = 6, onLabelProgress = null) {
   if (!isM110Connected()) throw new Error('M110 non connectée');
+
   const list = Array.isArray(rasters) ? rasters : [];
-  if (!list.length) return { elapsedMs: 0, chunkSize: 128, writes: 0 };
+  if (!list.length) return { elapsedMs: 0, chunkSize: 128, writes: 0, microBatches: 0 };
 
   const densityValue = Math.round(5 + Math.max(1, Math.min(8, density)) * 1.25);
   const profile = getM110SpeedProfile();
   const startedAt = performance.now();
 
-  // Réglages une seule fois pour tout le lot.
-  await m110Send([0x1b, 0x4e, 0x0d, 0x05]);
-  await sleep(profile.commandDelay);
-  await m110Send([0x1b, 0x4e, 0x04, densityValue]);
-  await sleep(profile.commandDelay);
-  await m110Send([0x1f, 0x11, 0x0a]);
-  await sleep(profile.commandDelay);
-
+  // V24 : la M110 devient parfois instable après 5 étiquettes rapides.
+  // On limite donc chaque sous-lot à 5 puis on laisse le tampon se vider
+  // et on réinitialise proprement les réglages avant de continuer.
+  const MICRO_BATCH_SIZE = 5;
+  const microBatches = Math.ceil(list.length / MICRO_BATCH_SIZE);
   let totalWrites = 0;
+  let globalIndex = 0;
 
-  for (let labelIndex = 0; labelIndex < list.length; labelIndex++) {
-    const raster = list[labelIndex];
-    const h = raster.heightLines;
+  async function initPrinterForMicroBatch() {
+    await m110Send([0x1b, 0x4e, 0x0d, 0x05]);
+    await sleep(profile.commandDelay);
+    await m110Send([0x1b, 0x4e, 0x04, densityValue]);
+    await sleep(profile.commandDelay);
+    await m110Send([0x1f, 0x11, 0x0a]);
+    await sleep(profile.commandDelay);
+  }
 
-    await m110Send(new Uint8Array([
-      0x1d, 0x76, 0x30, 0x00,
-      raster.widthBytes & 0xff, (raster.widthBytes >> 8) & 0xff,
-      h & 0xff, (h >> 8) & 0xff
-    ]));
+  for (let batchIndex = 0; batchIndex < microBatches; batchIndex++) {
+    const batchStart = batchIndex * MICRO_BATCH_SIZE;
+    const batchEnd = Math.min(batchStart + MICRO_BATCH_SIZE, list.length);
 
-    const transport = await sendRasterPayloadM110(raster.data, profile);
-    totalWrites += transport.writes;
+    await initPrinterForMicroBatch();
 
-    await sleep(profile.beforeFooter);
-    await m110Send([0x1f, 0xf0, 0x05, 0x00, 0x1f, 0xf0, 0x03, 0x00]);
+    for (let i = batchStart; i < batchEnd; i++) {
+      const raster = list[i];
+      const h = raster.heightLines;
 
-    const isLast = labelIndex === list.length - 1;
-    if (isLast) {
-      await sleep(profile.afterFooter);
-    } else {
-      await sleep(profile.betweenLabels);
+      // Protection particulière de la dernière étiquette d'un lot >= 6 :
+      // on laisse le tampon respirer avant de commencer la dernière image,
+      // puis on l'envoie sans mini-rafale.
+      const isGlobalLast = i === list.length - 1;
+      if (isGlobalLast && list.length >= 6) {
+        await sleep(420);
+      }
 
-      // Pour les lots de plusieurs étiquettes, une micro-pause très courte
-      // toutes les 5 étiquettes empêche le tampon de prendre du retard.
-      const done = labelIndex + 1;
-      if (profile.cooldownEvery && done % profile.cooldownEvery === 0) {
-        await sleep(profile.cooldownMs || 0);
+      await m110Send(new Uint8Array([
+        0x1d, 0x76, 0x30, 0x00,
+        raster.widthBytes & 0xff, (raster.widthBytes >> 8) & 0xff,
+        h & 0xff, (h >> 8) & 0xff
+      ]));
+
+      const safeProfile = (isGlobalLast && list.length >= 6)
+        ? {
+            ...profile,
+            burstSize: 1,
+            burstDelay: Math.max(10, profile.burstDelay || 0)
+          }
+        : profile;
+
+      const transport = await sendRasterPayloadM110(raster.data, safeProfile);
+      totalWrites += transport.writes;
+
+      // Un peu plus de marge avant le footer sur la dernière étiquette.
+      await sleep(
+        isGlobalLast && list.length >= 6
+          ? Math.max(200, profile.beforeFooter || 0)
+          : profile.beforeFooter
+      );
+
+      await m110Send([0x1f, 0xf0, 0x05, 0x00, 0x1f, 0xf0, 0x03, 0x00]);
+
+      globalIndex++;
+      if (onLabelProgress) onLabelProgress(globalIndex, list.length);
+
+      const isEndOfMicroBatch = i === batchEnd - 1;
+      const isVeryLast = i === list.length - 1;
+
+      if (isVeryLast) {
+        await sleep(Math.max(650, profile.afterFooter || 0));
+      } else if (isEndOfMicroBatch) {
+        // Gros vidage de tampon après chaque bloc de 5.
+        await sleep(950);
+      } else {
+        await sleep(profile.betweenLabels);
       }
     }
-
-    if (onLabelProgress) onLabelProgress(labelIndex + 1, list.length);
   }
 
   const elapsedMs = Math.round(performance.now() - startedAt);
-  return { elapsedMs, chunkSize: 128, writes: totalWrites };
+  return {
+    elapsedMs,
+    chunkSize: 128,
+    writes: totalWrites,
+    microBatches
+  };
 }
 
 async function printOneM110(match, trackingValue) {
@@ -1464,7 +1646,9 @@ function queueM110Print(matches, trackingValue) {
       const density = Number(document.getElementById('m110Density')?.value || 6);
       const rasters = copy.map(item => rasterizeM110Match(item, trackingValue));
       setM110Progress(0, true);
-      setM110Status(`📦 Envoi groupé de ${copy.length} étiquette(s) — ${size.width}×${size.height} mm — ${profile.label}…`, 'wait');
+      const microBatchCount = Math.ceil(copy.length / 5);
+      const batchInfo = copy.length >= 6 ? ` · ${microBatchCount} sous-lots sécurisés` : '';
+      setM110Status(`📦 Envoi groupé de ${copy.length} étiquette(s)${batchInfo} — ${size.width}×${size.height} mm — ${profile.label}…`, 'wait');
       const result = await printRasterBatchM110(rasters, density, (done, total) => {
         const pct = Math.round(done / total * 100);
         setM110Progress(pct, true);
@@ -1477,7 +1661,8 @@ function queueM110Print(matches, trackingValue) {
       const seconds = secondsNum.toFixed(1);
       const perLabel = (secondsNum / copy.length).toFixed(2);
       setM110Status(`✅ ${copy.length} étiquette(s) en ${seconds} s (${perLabel} s/étiquette) — ${profile.label}.`, 'ok');
-      setM110TransportInfo(`Transport : 128 octets fixe · ${result.writes} écritures · lot groupé.`);
+      const splitText = result.microBatches > 1 ? ` · ${result.microBatches} sous-lots de max. 5` : '';
+      setM110TransportInfo(`Transport : 128 octets fixe · ${result.writes} écritures · lot groupé${splitText}.`);
       if (navigator.vibrate) navigator.vibrate([80, 40, 80]);
     } catch (err) {
       console.error('M110 print error:', err);
@@ -4310,12 +4495,12 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 // =============================================================
-// V23 — MISE À JOUR / CACHE FIABLE
+// V24 — MISE À JOUR / CACHE FIABLE
 // - le navigateur vérifie toujours la dernière version de sw.js
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "23.0.0";
+const APP_VERSION = "24.0.0";
 try {
   const el = document.getElementById('appVersionText');
   if (el) el.textContent = `v${APP_VERSION}`;
@@ -4350,7 +4535,7 @@ async function installFreshServiceWorker() {
       location.reload();
     });
   } catch (err) {
-    console.warn("Service worker V23 non disponible :", err);
+    console.warn("Service worker V24 non disponible :", err);
   }
 }
 

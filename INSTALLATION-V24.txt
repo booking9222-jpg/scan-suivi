@@ -1,0 +1,36 @@
+V24 — BLUETOOTH PLUS ROBUSTE + LOTS DE 5
+
+À mettre sur GitHub :
+- index.html
+- sw.js
+
+Aucun changement Google Sheets / Apps Script.
+
+1) BLUETOOTH
+- La liste « Connexion rapide » affiche maintenant TOUS les appareils déjà autorisés à ce site,
+  pas seulement ceux dont le nom contient M110/Phomemo.
+- La dernière imprimante utilisée est mémorisée et placée en priorité.
+- Un clic sur son nom lance jusqu'à 3 tentatives.
+- Entre deux tentatives, la connexion GATT est réellement fermée puis recréée.
+- Cela aide quand Android indique « connecté » mais que la session Web Bluetooth est bloquée.
+- Le bouton principal utilise « Afficher tous les appareils Bluetooth » afin de ne pas rater une
+  imprimante dont le nom Bluetooth serait différent.
+- Après une coupure involontaire, reconnexion automatique avec plusieurs tentatives.
+
+Limite Web Bluetooth :
+Un appareil seulement appairé dans Android n'est pas automatiquement autorisé au site.
+Chrome impose une autorisation initiale via son sélecteur. Une fois autorisé à 222-ipg.github.io,
+le site peut le retrouver via les appareils déjà autorisés.
+
+2) IMPRESSION DE 6 À 13 ÉTIQUETTES
+- Les lots sont automatiquement divisés en sous-lots de maximum 5.
+- Exemple : 13 = 5 + 5 + 3.
+- Après chaque groupe de 5 : vidage du tampon + réinitialisation M110.
+- La toute dernière étiquette d'un lot >= 6 est volontairement envoyée un peu plus prudemment.
+- Le mode Turbo fiable reste disponible et inchangé dans le sélecteur.
+
+Après mise à jour :
+1. Ouvre https://222-ipg.github.io/?v=24
+2. Vérifie « Version actuelle : v24.0.0 »
+3. Pour le Bluetooth, regarde d'abord « Connexion rapide ».
+4. Teste ensuite un lot de 6 à 8 étiquettes en Turbo fiable.
