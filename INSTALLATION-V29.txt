@@ -1,0 +1,66 @@
+V29 — BLUETOOTH : 2 SOLUTIONS SÉPARÉES
+
+À mettre sur GitHub :
+- index.html
+- sw.js
+
+Aucun changement Google Sheets / Apps Script.
+
+OBJECTIF :
+Ne plus ouvrir silencieusement la grande recherche de tous les appareils Bluetooth
+lorsque la dernière imprimante est déjà connue.
+
+SOLUTION 1 — IMPRIMANTE DÉJÀ AUTORISÉE
+Le site affiche immédiatement :
+✅ Q199... autorisée → connexion directe
+
+Puis le bouton :
+⭐ Reconnecter Q199...
+
+Ce bouton :
+- utilise navigator.bluetooth.getDevices();
+- retrouve uniquement la dernière imprimante déjà autorisée ;
+- tente la connexion GATT jusqu'à 4 fois ;
+- N'OUVRE JAMAIS le sélecteur Bluetooth.
+
+SOLUTION 2 — IMPRIMANTE MÉMORISÉE MAIS NON AUTORISÉE SUR CE SITE
+Le site affiche immédiatement :
+⚠️ Q199... mémorisée mais pas autorisée sur booking9222-ipg.github.io
+
+Puis un bouton distinct :
+🔐 Réautoriser Q199...
+
+Ce bouton ouvre un sélecteur Web Bluetooth avec un filtre EXACT :
+{ name: "Q199G37Q0860077..." }
+
+Il ne demande donc pas "tous les appareils Bluetooth".
+
+CHANGER D'IMPRIMANTE
+Le bouton :
+📡 Afficher tous les appareils Bluetooth
+reste volontairement séparé. Il est le seul mode qui utilise acceptAllDevices:true.
+
+Le bouton :
+🔵 Trouver / connecter une autre M110
+utilise des filtres de noms M110 / M120 / M220 / Phomemo / Q.
+
+IMPORTANT
+Chrome/Android reste responsable de l'interface du sélecteur Bluetooth.
+Le site ne peut pas forcer Android à afficher les résultats progressivement,
+mais la V29 évite la recherche générale pour la dernière imprimante connue.
+
+Toutes les fonctions V28 sont conservées :
+- description produit plus grande ;
+- marge code-barres 50x30 ;
+- modes Bluetooth, dont Extra Extra Safe ;
+- fichiers GitHub automatiques ;
+- Google Sheets / rangement / recherche.
+
+Après mise à jour :
+1. Ouvre https://booking9222-ipg.github.io/?v=29 (si c'est ton domaine actuel)
+   ou ton domaine GitHub Pages habituel avec ?v=29.
+2. Vérifie « Version actuelle : v29.0.0 ».
+3. Regarde immédiatement le message sous la dernière imprimante :
+   ✅ autorisée → Reconnecter
+   ou
+   ⚠️ non autorisée → Réautoriser

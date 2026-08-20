@@ -344,13 +344,59 @@
     color:#1b5e20;
   }
 
+  .m110-auth-state {
+    margin-bottom:8px;
+    padding:9px 11px;
+    border-radius:9px;
+    border:1px solid #d8dee3;
+    background:#f5f7f8;
+    color:#455a64;
+    font-size:13px;
+    font-weight:900;
+    line-height:1.35;
+  }
+  .m110-auth-state.ok {
+    background:#e8f5e9;
+    border-color:#81c784;
+    color:#1b5e20;
+  }
+  .m110-auth-state.warn {
+    background:#fff8e1;
+    border-color:#ffca28;
+    color:#6d4c41;
+  }
+  .m110-auth-state.err {
+    background:#ffebee;
+    border-color:#ef9a9a;
+    color:#b71c1c;
+  }
+  .m110-last-reauthorize-btn {
+    width:100%;
+    min-height:50px;
+    border:3px solid #ef6c00;
+    background:#fff3e0;
+    color:#bf360c;
+    border-radius:12px;
+    padding:10px 14px;
+    font-size:16px;
+    font-weight:900;
+    line-height:1.25;
+    cursor:pointer;
+    box-shadow:0 2px 5px rgba(0,0,0,.10);
+  }
+  .m110-last-reauthorize-btn.connecting {
+    background:#fff8e1;
+    border-color:#f9a825;
+    color:#6d4c41;
+  }
+
 </style>
 </head>
 <body>
 <!-- V21 : M110 Ultra sûr 128 octets, optimisé 1-13 -->
 
 <h1>📦 Vine : ouverture → M110 → rangement synchronisé</h1>
-<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v28</strong></div>
+<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v29</strong></div>
 
 <div class="team-workflow-card" id="teamWorkflowCard">
   <div class="team-workflow-title">⚙️ Organisation du travail</div>
@@ -382,11 +428,20 @@
 <div class="card printer-card" id="m110Card">
   <strong>🖨️ Phomemo M110 — impression Bluetooth directe</strong>
   <div id="m110LastReconnectWrap" style="display:none;margin:10px 0 8px;">
-    <button type="button" id="m110LastReconnectBtn" class="m110-last-reconnect-btn">
+    <div id="m110LastAuthorizationState" class="m110-auth-state wait">
+      🔎 Vérification de la dernière imprimante…
+    </div>
+
+    <button type="button" id="m110LastReconnectBtn" class="m110-last-reconnect-btn" style="display:none;">
       ⭐ Reconnecter la dernière M110
     </button>
-    <div id="m110LastReconnectSub" class="mini-note" style="margin-top:5px;">
-      Un appui suffit si cette imprimante a déjà été autorisée à ce site.
+
+    <button type="button" id="m110LastReauthorizeBtn" class="m110-last-reauthorize-btn" style="display:none;">
+      🔐 Réautoriser la dernière M110
+    </button>
+
+    <div id="m110LastReconnectSub" class="mini-note" style="margin-top:6px;">
+      La V29 distingue la connexion directe de la réautorisation Bluetooth.
     </div>
   </div>
 
@@ -944,15 +999,15 @@ function updateM110Buttons() {
   if (b2) b2.style.display = connected ? 'none' : 'inline-block';
   if (bd) bd.style.display = connected ? 'inline-block' : 'none';
   updateKnownM110ButtonsVisual();
-  updateM110LastReconnectButton();
 }
 
 
 
 let m110KnownDevicesCache = [];
 let m110ReconnectTimer = null;
-const M110_LAST_DEVICE_KEY = 'vine-m110-last-device-v28';
+const M110_LAST_DEVICE_KEY = 'vine-m110-last-device-v29';
 const M110_LAST_DEVICE_OLD_KEYS = [
+  'vine-m110-last-device-v28',
   'vine-m110-last-device-v24'
 ];
 
@@ -999,6 +1054,21 @@ function updateM110LastDeviceInfo() {
 }
 
 
+
+function setM110AuthorizationState(text, state = 'wait') {
+  const el = document.getElementById('m110LastAuthorizationState');
+  if (!el) return;
+  el.className = `m110-auth-state ${state}`;
+  el.textContent = text;
+}
+
+function setM110ReauthorizeButtonVisible(visible, name = '') {
+  const btn = document.getElementById('m110LastReauthorizeBtn');
+  if (!btn) return;
+  btn.style.display = visible ? 'block' : 'none';
+  if (visible) btn.textContent = `🔐 Réautoriser ${name || 'la dernière M110'}`;
+}
+
 function updateM110LastReconnectButton(state = '') {
   const wrap = document.getElementById('m110LastReconnectWrap');
   const btn = document.getElementById('m110LastReconnectBtn');
@@ -1006,41 +1076,55 @@ function updateM110LastReconnectButton(state = '') {
   if (!wrap || !btn) return;
 
   const last = readLastM110Device();
+
   if (!last.id && !last.name) {
     wrap.style.display = 'none';
+    setM110ReauthorizeButtonVisible(false);
     return;
   }
 
   wrap.style.display = 'block';
   const name = last.name || 'M110';
+
   const connected = !!(
     isM110Connected() &&
     m110Device &&
     (
       (last.id && m110Device.id === last.id) ||
-      (!last.id && String(m110Device.name || '') === String(last.name || ''))
+      String(m110Device.name || '') === String(last.name || '')
     )
   );
 
   btn.classList.remove('connecting', 'connected');
 
+  if (state === 'checking') {
+    btn.style.display = 'none';
+    setM110ReauthorizeButtonVisible(false);
+    setM110AuthorizationState(`🔎 Vérification de ${name} sur ${location.hostname}…`, 'wait');
+    if (sub) sub.textContent = 'La V29 vérifie d’abord si Chrome a déjà autorisé cette imprimante à ce site.';
+    return;
+  }
+
   if (state === 'connecting') {
+    btn.style.display = 'block';
     btn.classList.add('connecting');
     btn.disabled = true;
-    btn.textContent = `⏳ Reconnexion à ${name}…`;
-    if (sub) sub.textContent = 'Le site tente de reprendre directement la connexion Bluetooth.';
+    btn.textContent = `⏳ Connexion directe à ${name}…`;
+    setM110ReauthorizeButtonVisible(false);
+    setM110AuthorizationState(`✅ ${name} autorisée → connexion directe en cours…`, 'ok');
+    if (sub) sub.textContent = 'Aucune grande recherche Bluetooth : le site utilise directement l’autorisation déjà enregistrée.';
     return;
   }
 
   btn.disabled = false;
 
   if (connected) {
+    btn.style.display = 'block';
     btn.classList.add('connected');
     btn.textContent = `✅ ${name} — connectée`;
-    if (sub) sub.textContent = 'Cette imprimante est actuellement prête à imprimer.';
-  } else {
-    btn.textContent = `⭐ Reconnecter ${name}`;
-    if (sub) sub.textContent = 'Appuie ici : si Chrome connaît encore cette imprimante, aucune sélection Bluetooth n’est nécessaire.';
+    setM110ReauthorizeButtonVisible(false);
+    setM110AuthorizationState(`✅ ${name} autorisée et connectée`, 'ok');
+    if (sub) sub.textContent = 'Cette imprimante est prête à imprimer.';
   }
 }
 
@@ -1055,13 +1139,11 @@ async function findLastAuthorizedM110() {
   try {
     const devices = await navigator.bluetooth.getDevices();
 
-    // L'identifiant est le plus fiable.
     if (last.id) {
       const exact = devices.find(d => d.id === last.id);
       if (exact) return exact;
     }
 
-    // Secours : même nom Bluetooth.
     if (last.name) {
       const byName = devices.find(
         d => String(d.name || '').trim() === String(last.name || '').trim()
@@ -1075,12 +1157,78 @@ async function findLastAuthorizedM110() {
   return null;
 }
 
+async function refreshLastM110AuthorizationState() {
+  const wrap = document.getElementById('m110LastReconnectWrap');
+  const btn = document.getElementById('m110LastReconnectBtn');
+  const sub = document.getElementById('m110LastReconnectSub');
+  const last = readLastM110Device();
+
+  if (!wrap || !btn) return null;
+
+  if (!last.id && !last.name) {
+    wrap.style.display = 'none';
+    return null;
+  }
+
+  wrap.style.display = 'block';
+  const name = last.name || 'M110';
+
+  if (
+    isM110Connected() &&
+    m110Device &&
+    (
+      (last.id && m110Device.id === last.id) ||
+      String(m110Device.name || '') === String(last.name || '')
+    )
+  ) {
+    updateM110LastReconnectButton();
+    return m110Device;
+  }
+
+  updateM110LastReconnectButton('checking');
+
+  if (!navigator.bluetooth || typeof navigator.bluetooth.getDevices !== 'function') {
+    btn.style.display = 'none';
+    setM110ReauthorizeButtonVisible(true, name);
+    setM110AuthorizationState(
+      `⚠️ ${name} mémorisée, mais ce navigateur ne permet pas de vérifier les appareils déjà autorisés.`,
+      'warn'
+    );
+    if (sub) sub.textContent = 'Utilise « Réautoriser » pour ouvrir une recherche filtrée sur cette imprimante uniquement.';
+    return null;
+  }
+
+  const device = await findLastAuthorizedM110();
+
+  if (device) {
+    btn.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = `⭐ Reconnecter ${name}`;
+    setM110ReauthorizeButtonVisible(false);
+    setM110AuthorizationState(`✅ ${name} autorisée → connexion directe`, 'ok');
+    if (sub) {
+      sub.textContent = 'Solution 1 : appuie sur Reconnecter. Aucun sélecteur Bluetooth ne doit s’ouvrir.';
+    }
+    return device;
+  }
+
+  btn.style.display = 'none';
+  setM110ReauthorizeButtonVisible(true, name);
+  setM110AuthorizationState(
+    `⚠️ ${name} mémorisée mais pas autorisée sur ${location.hostname}`,
+    'warn'
+  );
+  if (sub) {
+    sub.textContent = `Solution 2 : appuie sur « Réautoriser ${name} ». La recherche Bluetooth sera filtrée sur ce nom précis, pas sur tous les appareils.`;
+  }
+  return null;
+}
+
 async function reconnectLastM110() {
   const last = readLastM110Device();
 
   if (!last.id && !last.name) {
     setM110Status('ℹ️ Aucune imprimante précédente mémorisée.', 'wait');
-    updateM110LastReconnectButton();
     return false;
   }
 
@@ -1102,53 +1250,95 @@ async function reconnectLastM110() {
     return true;
   }
 
+  // V29 : ce bouton n'ouvre JAMAIS le sélecteur Bluetooth.
+  // Soit l'imprimante est déjà autorisée, soit on affiche le bouton Réautoriser.
+  const device = await findLastAuthorizedM110();
+
+  if (!device) {
+    await refreshLastM110AuthorizationState();
+    setM110Status(
+      `⚠️ ${last.name || 'La M110'} n’est pas autorisée à ce site. Utilise le bouton « Réautoriser » juste au-dessus.`,
+      'wait'
+    );
+    return false;
+  }
+
   updateM110LastReconnectButton('connecting');
-  setM110Status(`⭐ Recherche de ${last.name || 'la dernière M110'}…`, 'wait');
+  setM110Status(`⭐ Connexion directe à ${last.name || 'la dernière M110'}…`, 'wait');
+
+  const ok = await connectKnownM110(device, false, 4);
+  await refreshLastM110AuthorizationState();
+  return ok;
+}
+
+async function reauthorizeLastM110() {
+  const last = readLastM110Device();
+  const btn = document.getElementById('m110LastReauthorizeBtn');
+
+  if (!last.name) {
+    setM110Status(
+      '⚠️ Le nom Bluetooth de la dernière imprimante est inconnu. Utilise « Afficher tous les appareils Bluetooth » une fois.',
+      'wait'
+    );
+    return false;
+  }
+
+  if (!('bluetooth' in navigator)) {
+    setM110Status('❌ Web Bluetooth indisponible dans ce navigateur.', 'err');
+    return false;
+  }
 
   try {
-    // Cas normal : l'imprimante a déjà été autorisée à 222-ipg.github.io.
-    const device = await findLastAuthorizedM110();
-    if (device) {
-      const ok = await connectKnownM110(device, false, 4);
-      updateM110LastReconnectButton();
-      return ok;
+    if (btn) {
+      btn.disabled = true;
+      btn.classList.add('connecting');
+      btn.textContent = `⏳ Recherche ciblée : ${last.name}…`;
     }
 
-    // Si Chrome a perdu l'autorisation du site, on reste sur UN SEUL bouton :
-    // son clic ouvre alors le sélecteur pour ré-autoriser l'imprimante.
+    setM110AuthorizationState(
+      `🔐 Réautorisation ciblée de ${last.name} sur ${location.hostname}…`,
+      'wait'
+    );
     setM110Status(
-      `⚠️ ${last.name || 'La M110'} est mémorisée, mais Chrome ne l'autorise plus au site. Sélectionne-la une fois dans la liste qui va s'ouvrir.`,
+      `🔐 Recherche Bluetooth limitée à ${last.name}. Les autres appareils ne sont pas demandés.`,
       'wait'
     );
 
+    // Solution 2 V29 : filtre EXACT sur le nom mémorisé.
+    // On n'utilise volontairement PAS acceptAllDevices ici.
     const selectedDevice = await navigator.bluetooth.requestDevice({
-      acceptAllDevices: true,
+      filters: [
+        { name: String(last.name) }
+      ],
       optionalServices: M110_BLE.services
     });
 
     if (!selectedDevice) throw new Error('Aucune imprimante sélectionnée.');
 
+    rememberLastM110Device(selectedDevice);
     const ok = await finishM110Connection(selectedDevice, false, 4);
-    updateM110LastReconnectButton();
     await refreshKnownM110Devices();
+    await refreshLastM110AuthorizationState();
     return ok;
   } catch (err) {
-    console.error('Reconnexion dernière M110 impossible :', err);
+    console.error('Réautorisation M110 ciblée impossible :', err);
 
     if (
       err?.name === 'NotFoundError' ||
       String(err?.message || '').includes('User cancelled')
     ) {
-      setM110Status('ℹ️ Reconnexion annulée.', 'wait');
+      setM110Status(`ℹ️ Réautorisation de ${last.name} annulée ou imprimante non trouvée.`, 'wait');
     } else {
-      setM110Status(
-        `❌ Reconnexion à ${last.name || 'la dernière M110'} impossible : ${err.message || err}`,
-        'err'
-      );
+      setM110Status(`❌ Réautorisation de ${last.name} impossible : ${err.message || err}`, 'err');
     }
 
-    updateM110LastReconnectButton();
+    await refreshLastM110AuthorizationState();
     return false;
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.classList.remove('connecting');
+    }
   }
 }
 
@@ -1200,7 +1390,6 @@ function updateKnownM110ButtonsVisual() {
   });
 
   updateM110LastDeviceInfo();
-  updateM110LastReconnectButton();
 }
 
 async function refreshKnownM110Devices() {
@@ -1270,6 +1459,7 @@ function bindM110DisconnectListener(device) {
     setM110Progress(0, false);
     updateM110Buttons();
     refreshKnownM110Devices();
+    refreshLastM110AuthorizationState();
 
     clearTimeout(m110ReconnectTimer);
     m110ReconnectTimer = setTimeout(async () => {
@@ -1349,8 +1539,8 @@ async function finishM110Connection(device, silent = false, maxAttempts = 3) {
 
       rememberLastM110Device(device);
       setM110Status(`✅ ${device.name || 'M110'} connectée — prête à imprimer`, 'ok');
-      updateM110LastReconnectButton();
       updateM110Buttons();
+      await refreshLastM110AuthorizationState();
       refreshKnownM110Devices();
       return true;
     } catch (err) {
@@ -1422,53 +1612,54 @@ async function connectM110(showAll = false) {
   }
 
   try {
-    // D'abord, essaie la dernière imprimante déjà autorisée sans sélecteur.
-    if (!showAll) {
-      const known = await refreshKnownM110Devices();
-      const last = readLastM110Device();
+    let requestOptions;
 
-      const preferred =
-        (last.id && known.find(d => d.id === last.id)) ||
-        known.find(isLikelyM110Device) ||
-        (known.length === 1 ? known[0] : null);
-
-      if (preferred) {
-        const ok = await connectKnownM110(preferred, false, 3);
-        if (ok) return true;
-      }
+    if (showAll) {
+      // Bouton séparé : uniquement quand on veut réellement changer d'imprimante
+      // ou afficher tous les appareils.
+      setM110Status('📡 Recherche de tous les appareils Bluetooth…', 'wait');
+      requestOptions = {
+        acceptAllDevices: true,
+        optionalServices: M110_BLE.services
+      };
+    } else {
+      // Bouton "une autre M110" : filtre uniquement les noms typiques Phomemo.
+      // La dernière imprimante a ses propres boutons Reconnecter / Réautoriser.
+      setM110Status('🔵 Recherche d’une autre imprimante Phomemo/M110…', 'wait');
+      requestOptions = {
+        filters: [
+          { namePrefix: 'M110' },
+          { namePrefix: 'M120' },
+          { namePrefix: 'M220' },
+          { namePrefix: 'Phomemo' },
+          { namePrefix: 'Q' }
+        ],
+        optionalServices: M110_BLE.services
+      };
     }
 
-    // V24 : acceptAllDevices évite de manquer une M110 dont le nom Bluetooth
-    // ne correspond pas exactement à "M110" / "Phomemo".
-    setM110Status('Choisissez votre M110 dans la liste Bluetooth…', 'wait');
-
-    const selectedDevice = await navigator.bluetooth.requestDevice({
-      acceptAllDevices: true,
-      optionalServices: M110_BLE.services
-    });
-
+    const selectedDevice = await navigator.bluetooth.requestDevice(requestOptions);
     if (!selectedDevice) throw new Error('Aucune imprimante sélectionnée.');
 
     const ok = await finishM110Connection(selectedDevice, false, 3);
     await refreshKnownM110Devices();
+    await refreshLastM110AuthorizationState();
     return ok;
   } catch (err) {
     console.error('M110 connect error:', err);
 
-    if (err && (
-      err.name === 'NotFoundError' ||
-      String(err.message || '').includes('User cancelled')
-    )) {
-      setM110Status(
-        'ℹ️ Sélection annulée. Si la M110 apparaît dans « Connexion rapide », touchez directement son nom.',
-        'wait'
-      );
+    if (
+      err?.name === 'NotFoundError' ||
+      String(err?.message || '').includes('User cancelled')
+    ) {
+      setM110Status('ℹ️ Sélection Bluetooth annulée ou aucune imprimante correspondante trouvée.', 'wait');
     } else {
       setM110Status('❌ Connexion M110 impossible : ' + (err.message || err), 'err');
     }
 
     updateM110Buttons();
     refreshKnownM110Devices();
+    refreshLastM110AuthorizationState();
     return false;
   }
 }
@@ -1485,6 +1676,7 @@ function disconnectM110() {
   setM110Progress(0, false);
   updateM110Buttons();
   refreshKnownM110Devices();
+  refreshLastM110AuthorizationState();
 }
 
 async function m110Send(bytes) {
@@ -4744,16 +4936,18 @@ window.addEventListener("DOMContentLoaded", () => {
   restoreAutoPrintSingleUi();
   restoreM110SpeedUi();
   restoreM110LayoutUi();
-  updateM110LastReconnectButton();
   updateM110Buttons();
+  updateM110LastReconnectButton('checking');
   refreshKnownM110Devices();
-  // Reconnexion silencieuse conservée ; le bouton reste disponible quoi qu'il arrive.
-  setTimeout(() => connectFirstKnownM110(), 450);
+  // V29 : on n'ouvre jamais de fenêtre Bluetooth silencieusement au démarrage.
+  // On affiche immédiatement l'état autorisée / non autorisée.
+  setTimeout(() => refreshLastM110AuthorizationState(), 250);
   initStorageMode();
   initCloudSync();
   initTeamWorkflow();
 
   document.getElementById('m110LastReconnectBtn').addEventListener('click', reconnectLastM110);
+  document.getElementById('m110LastReauthorizeBtn').addEventListener('click', reauthorizeLastM110);
   document.getElementById('connectM110').addEventListener('click', () => connectM110(false));
   document.getElementById('connectM110All').addEventListener('click', () => connectM110(true));
   document.getElementById('disconnectM110').addEventListener('click', disconnectM110);
@@ -4768,17 +4962,20 @@ window.addEventListener("DOMContentLoaded", () => {
   document.getElementById('testM110').addEventListener('click', () => manualPrintM110([makeM110TestMatch()], 'TEST'));
   document.getElementById('testM110Burst').addEventListener('click', testM110Burst);
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') refreshKnownM110Devices();
+    if (document.visibilityState === 'visible') {
+      refreshKnownM110Devices();
+      refreshLastM110AuthorizationState();
+    }
   });
 });
 
 // =============================================================
-// V28 — MISE À JOUR / CACHE FIABLE
+// V29 — MISE À JOUR / CACHE FIABLE
 // - le navigateur vérifie toujours la dernière version de sw.js
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "28.0.0";
+const APP_VERSION = "29.0.0";
 try {
   const el = document.getElementById('appVersionText');
   if (el) el.textContent = `v${APP_VERSION}`;
@@ -4813,7 +5010,7 @@ async function installFreshServiceWorker() {
       location.reload();
     });
   } catch (err) {
-    console.warn("Service worker V28 non disponible :", err);
+    console.warn("Service worker V29 non disponible :", err);
   }
 }
 
