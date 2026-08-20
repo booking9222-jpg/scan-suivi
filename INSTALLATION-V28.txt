@@ -1,0 +1,37 @@
+V28 — BOUTON PERMANENT « DERNIÈRE IMPRIMANTE »
+
+À mettre sur GitHub :
+- index.html
+- sw.js
+
+Aucun changement Google Sheets / Apps Script.
+
+Nouveau fonctionnement Bluetooth :
+- dès qu'une imprimante a déjà été connectée avec succès, son nom est mémorisé ;
+- un gros bouton reste visible en haut de la zone M110 :
+  « ⭐ Reconnecter M110-XXXX » ;
+- appuyer dessus cherche directement CETTE imprimante parmi les appareils déjà autorisés à 222-ipg.github.io ;
+- si elle est retrouvée : connexion GATT automatique, jusqu'à 4 tentatives ;
+- si Chrome a perdu l'autorisation Web Bluetooth : le même bouton ouvre le sélecteur une seule fois pour la ré-autoriser ;
+- une fois connectée, le bouton devient :
+  « ✅ M110-XXXX — connectée ».
+
+La mémorisation de l'ancienne V24/V27 est migrée automatiquement vers V28.
+
+Limite Android / Chrome :
+Être connecté/appairé dans les réglages Bluetooth Android ne suffit pas toujours.
+Le site doit également avoir l'autorisation Web Bluetooth. Après la première autorisation,
+le bouton V28 permet normalement de se reconnecter directement.
+
+Toutes les fonctions V27 sont conservées :
+- description produit plus grande ;
+- marge code-barres 50x30 ;
+- 6 modes de débit Bluetooth ;
+- GitHub automatique ;
+- Google Sheets / rangement / recherche.
+
+Après mise à jour :
+1. Ouvre https://222-ipg.github.io/?v=28
+2. Vérifie « Version actuelle : v28.0.0 »
+3. Si une M110 avait déjà été utilisée, tu dois voir immédiatement le bouton avec son nom.
+4. Appuie dessus pour reconnecter.

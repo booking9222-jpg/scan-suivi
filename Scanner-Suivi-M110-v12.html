@@ -319,13 +319,38 @@
   }
   @media (max-width:560px) { .github-settings-grid { grid-template-columns:1fr; } }
 
+  .m110-last-reconnect-btn {
+    width:100%;
+    min-height:52px;
+    border:3px solid #1565c0;
+    background:#e3f2fd;
+    color:#0d47a1;
+    border-radius:12px;
+    padding:11px 14px;
+    font-size:16px;
+    font-weight:900;
+    line-height:1.25;
+    cursor:pointer;
+    box-shadow:0 2px 5px rgba(0,0,0,.12);
+  }
+  .m110-last-reconnect-btn.connecting {
+    background:#fff8e1;
+    border-color:#f9a825;
+    color:#6d4c41;
+  }
+  .m110-last-reconnect-btn.connected {
+    background:#e8f5e9;
+    border-color:#2e7d32;
+    color:#1b5e20;
+  }
+
 </style>
 </head>
 <body>
 <!-- V21 : M110 Ultra sûr 128 octets, optimisé 1-13 -->
 
 <h1>📦 Vine : ouverture → M110 → rangement synchronisé</h1>
-<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v26</strong></div>
+<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v28</strong></div>
 
 <div class="team-workflow-card" id="teamWorkflowCard">
   <div class="team-workflow-title">⚙️ Organisation du travail</div>
@@ -356,8 +381,17 @@
 
 <div class="card printer-card" id="m110Card">
   <strong>🖨️ Phomemo M110 — impression Bluetooth directe</strong>
+  <div id="m110LastReconnectWrap" style="display:none;margin:10px 0 8px;">
+    <button type="button" id="m110LastReconnectBtn" class="m110-last-reconnect-btn">
+      ⭐ Reconnecter la dernière M110
+    </button>
+    <div id="m110LastReconnectSub" class="mini-note" style="margin-top:5px;">
+      Un appui suffit si cette imprimante a déjà été autorisée à ce site.
+    </div>
+  </div>
+
   <div class="printer-row">
-    <button class="btn printer-btn" id="connectM110">🔵 Trouver / connecter la M110</button>
+    <button class="btn printer-btn" id="connectM110">🔵 Trouver / connecter une autre M110</button>
     <button class="btn printer-btn secondary" id="connectM110All">📡 Afficher tous les appareils Bluetooth</button>
     <button class="btn printer-btn disconnect" id="disconnectM110" style="display:none;">Déconnecter</button>
   </div>
@@ -782,17 +816,17 @@ const M110_LAYOUT_PROFILE_KEY = 'm110-layout-profile-v15';
 const M110_LAYOUT_PROFILES = {
   normal: {
     label: 'Normal', sideRatio: 0.020, trackFontRatio: 0.050, asinFontRatio: 0.082, codeFontRatio: 0.092,
-    titleFontRatio: 0.050, barcodeHeight30: 0.34, barcodeHeightOther: 0.38, titleMax30: 3, titleMaxOther: 4,
+    titleFontRatio: 0.058, barcodeHeight30: 0.34, barcodeHeightOther: 0.38, titleMax30: 3, titleMaxOther: 4,
     moduleCandidates40: [2,1], moduleCandidates50: [3,2,1], barcodeMargin: 1
   },
   wide: {
     label: 'Code-barres large', sideRatio: 0.014, trackFontRatio: 0.047, asinFontRatio: 0.078, codeFontRatio: 0.088,
-    titleFontRatio: 0.044, barcodeHeight30: 0.40, barcodeHeightOther: 0.44, titleMax30: 2, titleMaxOther: 3,
+    titleFontRatio: 0.052, barcodeHeight30: 0.40, barcodeHeightOther: 0.44, titleMax30: 2, titleMaxOther: 3,
     moduleCandidates40: [3,2,1], moduleCandidates50: [4,3,2,1], barcodeMargin: 0
   },
   xxl: {
     label: 'Code-barres XXL', sideRatio: 0.010, trackFontRatio: 0.044, asinFontRatio: 0.074, codeFontRatio: 0.084,
-    titleFontRatio: 0.040, barcodeHeight30: 0.44, barcodeHeightOther: 0.48, titleMax30: 2, titleMaxOther: 2,
+    titleFontRatio: 0.048, barcodeHeight30: 0.44, barcodeHeightOther: 0.48, titleMax30: 2, titleMaxOther: 2,
     moduleCandidates40: [3,2,1], moduleCandidates50: [4,3,2,1], barcodeMargin: 0
   }
 };
@@ -810,11 +844,11 @@ function updateM110LayoutHint() {
   try { localStorage.setItem(M110_LAYOUT_PROFILE_KEY, value); } catch (_) {}
   if (!hint) return;
   if (value === 'xxl') {
-    hint.textContent = 'Code-barres XXL : priorité au scan. En 49/50×30 mm, la V26 conserve malgré tout une marge blanche de sécurité à gauche et à droite.';
+    hint.textContent = 'Code-barres XXL : priorité au scan. En 49/50×30 mm, la V27 conserve malgré tout une marge blanche de sécurité à gauche et à droite.';
   } else if (value === 'normal') {
     hint.textContent = 'Normal : mise en page équilibrée. En 49/50×30 mm, le code-barres est limité à environ 43,5 mm pour ne plus toucher le bord.';
   } else {
-    hint.textContent = 'Code-barres large : grand et lisible, mais en 49/50×30 mm la V26 garde automatiquement une marge blanche de sécurité des deux côtés.';
+    hint.textContent = 'Code-barres large : grand et lisible, mais en 49/50×30 mm la V27 garde automatiquement une marge blanche de sécurité des deux côtés.';
   }
 }
 
@@ -910,17 +944,34 @@ function updateM110Buttons() {
   if (b2) b2.style.display = connected ? 'none' : 'inline-block';
   if (bd) bd.style.display = connected ? 'inline-block' : 'none';
   updateKnownM110ButtonsVisual();
+  updateM110LastReconnectButton();
 }
 
 
 
 let m110KnownDevicesCache = [];
 let m110ReconnectTimer = null;
-const M110_LAST_DEVICE_KEY = 'vine-m110-last-device-v24';
+const M110_LAST_DEVICE_KEY = 'vine-m110-last-device-v28';
+const M110_LAST_DEVICE_OLD_KEYS = [
+  'vine-m110-last-device-v24'
+];
 
 function readLastM110Device() {
-  try { return JSON.parse(localStorage.getItem(M110_LAST_DEVICE_KEY) || "{}") || {}; }
-  catch (_) { return {}; }
+  try {
+    let raw = localStorage.getItem(M110_LAST_DEVICE_KEY);
+    if (!raw) {
+      for (const oldKey of M110_LAST_DEVICE_OLD_KEYS) {
+        raw = localStorage.getItem(oldKey);
+        if (raw) {
+          localStorage.setItem(M110_LAST_DEVICE_KEY, raw);
+          break;
+        }
+      }
+    }
+    return JSON.parse(raw || "{}") || {};
+  } catch (_) {
+    return {};
+  }
 }
 
 function rememberLastM110Device(device) {
@@ -933,6 +984,7 @@ function rememberLastM110Device(device) {
     }));
   } catch (_) {}
   updateM110LastDeviceInfo();
+  updateM110LastReconnectButton();
 }
 
 function updateM110LastDeviceInfo() {
@@ -943,6 +995,160 @@ function updateM110LastDeviceInfo() {
     el.textContent = `⭐ Dernière imprimante : ${last.name || 'M110'}`;
   } else {
     el.textContent = '';
+  }
+}
+
+
+function updateM110LastReconnectButton(state = '') {
+  const wrap = document.getElementById('m110LastReconnectWrap');
+  const btn = document.getElementById('m110LastReconnectBtn');
+  const sub = document.getElementById('m110LastReconnectSub');
+  if (!wrap || !btn) return;
+
+  const last = readLastM110Device();
+  if (!last.id && !last.name) {
+    wrap.style.display = 'none';
+    return;
+  }
+
+  wrap.style.display = 'block';
+  const name = last.name || 'M110';
+  const connected = !!(
+    isM110Connected() &&
+    m110Device &&
+    (
+      (last.id && m110Device.id === last.id) ||
+      (!last.id && String(m110Device.name || '') === String(last.name || ''))
+    )
+  );
+
+  btn.classList.remove('connecting', 'connected');
+
+  if (state === 'connecting') {
+    btn.classList.add('connecting');
+    btn.disabled = true;
+    btn.textContent = `⏳ Reconnexion à ${name}…`;
+    if (sub) sub.textContent = 'Le site tente de reprendre directement la connexion Bluetooth.';
+    return;
+  }
+
+  btn.disabled = false;
+
+  if (connected) {
+    btn.classList.add('connected');
+    btn.textContent = `✅ ${name} — connectée`;
+    if (sub) sub.textContent = 'Cette imprimante est actuellement prête à imprimer.';
+  } else {
+    btn.textContent = `⭐ Reconnecter ${name}`;
+    if (sub) sub.textContent = 'Appuie ici : si Chrome connaît encore cette imprimante, aucune sélection Bluetooth n’est nécessaire.';
+  }
+}
+
+async function findLastAuthorizedM110() {
+  const last = readLastM110Device();
+  if (!last.id && !last.name) return null;
+
+  if (!navigator.bluetooth || typeof navigator.bluetooth.getDevices !== 'function') {
+    return null;
+  }
+
+  try {
+    const devices = await navigator.bluetooth.getDevices();
+
+    // L'identifiant est le plus fiable.
+    if (last.id) {
+      const exact = devices.find(d => d.id === last.id);
+      if (exact) return exact;
+    }
+
+    // Secours : même nom Bluetooth.
+    if (last.name) {
+      const byName = devices.find(
+        d => String(d.name || '').trim() === String(last.name || '').trim()
+      );
+      if (byName) return byName;
+    }
+  } catch (err) {
+    console.warn('Recherche dernière M110 autorisée impossible :', err);
+  }
+
+  return null;
+}
+
+async function reconnectLastM110() {
+  const last = readLastM110Device();
+
+  if (!last.id && !last.name) {
+    setM110Status('ℹ️ Aucune imprimante précédente mémorisée.', 'wait');
+    updateM110LastReconnectButton();
+    return false;
+  }
+
+  if (!('bluetooth' in navigator)) {
+    setM110Status('❌ Web Bluetooth indisponible dans ce navigateur.', 'err');
+    return false;
+  }
+
+  if (
+    isM110Connected() &&
+    m110Device &&
+    (
+      (last.id && m110Device.id === last.id) ||
+      String(m110Device.name || '') === String(last.name || '')
+    )
+  ) {
+    setM110Status(`✅ ${last.name || 'M110'} déjà connectée — prête à imprimer`, 'ok');
+    updateM110LastReconnectButton();
+    return true;
+  }
+
+  updateM110LastReconnectButton('connecting');
+  setM110Status(`⭐ Recherche de ${last.name || 'la dernière M110'}…`, 'wait');
+
+  try {
+    // Cas normal : l'imprimante a déjà été autorisée à 222-ipg.github.io.
+    const device = await findLastAuthorizedM110();
+    if (device) {
+      const ok = await connectKnownM110(device, false, 4);
+      updateM110LastReconnectButton();
+      return ok;
+    }
+
+    // Si Chrome a perdu l'autorisation du site, on reste sur UN SEUL bouton :
+    // son clic ouvre alors le sélecteur pour ré-autoriser l'imprimante.
+    setM110Status(
+      `⚠️ ${last.name || 'La M110'} est mémorisée, mais Chrome ne l'autorise plus au site. Sélectionne-la une fois dans la liste qui va s'ouvrir.`,
+      'wait'
+    );
+
+    const selectedDevice = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: M110_BLE.services
+    });
+
+    if (!selectedDevice) throw new Error('Aucune imprimante sélectionnée.');
+
+    const ok = await finishM110Connection(selectedDevice, false, 4);
+    updateM110LastReconnectButton();
+    await refreshKnownM110Devices();
+    return ok;
+  } catch (err) {
+    console.error('Reconnexion dernière M110 impossible :', err);
+
+    if (
+      err?.name === 'NotFoundError' ||
+      String(err?.message || '').includes('User cancelled')
+    ) {
+      setM110Status('ℹ️ Reconnexion annulée.', 'wait');
+    } else {
+      setM110Status(
+        `❌ Reconnexion à ${last.name || 'la dernière M110'} impossible : ${err.message || err}`,
+        'err'
+      );
+    }
+
+    updateM110LastReconnectButton();
+    return false;
   }
 }
 
@@ -994,6 +1200,7 @@ function updateKnownM110ButtonsVisual() {
   });
 
   updateM110LastDeviceInfo();
+  updateM110LastReconnectButton();
 }
 
 async function refreshKnownM110Devices() {
@@ -1005,6 +1212,7 @@ async function refreshKnownM110Devices() {
 
   if (!navigator.bluetooth || typeof navigator.bluetooth.getDevices !== 'function') {
     wrap.style.display = 'none';
+    updateM110LastReconnectButton();
     return [];
   }
 
@@ -1017,6 +1225,7 @@ async function refreshKnownM110Devices() {
 
     if (!devices.length) {
       wrap.style.display = 'none';
+      updateM110LastReconnectButton();
       return [];
     }
 
@@ -1140,6 +1349,7 @@ async function finishM110Connection(device, silent = false, maxAttempts = 3) {
 
       rememberLastM110Device(device);
       setM110Status(`✅ ${device.name || 'M110'} connectée — prête à imprimer`, 'ok');
+      updateM110LastReconnectButton();
       updateM110Buttons();
       refreshKnownM110Devices();
       return true;
@@ -1491,7 +1701,8 @@ function generateM110LabelCanvas(match, trackingValue) {
   const trackingFont = Math.max(10, Math.min(14, Math.round(H * layout.trackFontRatio)));
   const asinFont = Math.max(14, Math.min(21, Math.round(H * (layout.asinFontRatio - 0.004))));
   const codeFont = Math.max(15, Math.min(22, Math.round(H * (layout.codeFontRatio - 0.004))));
-  const titleFont = Math.max(12, Math.min(17, Math.round(H * (layout.titleFontRatio + 0.014))));
+  // V27 : description produit un peu plus grande pour occuper l'espace libre.
+  const titleFont = Math.max(13, Math.min(19, Math.round(H * (layout.titleFontRatio + 0.018))));
 
   let y = Math.max(trackingFont + 2, Math.round(H * 0.060));
   ctx.textAlign = 'left';
@@ -1551,17 +1762,18 @@ function generateM110LabelCanvas(match, trackingValue) {
   ctx.font = `bold ${codeFont}px Arial`;
   ctx.fillText(truncateTextToWidth(ctx, barcodeValue, W - side * 2), W / 2, y);
 
-  y += titleFont + Math.max(2, Math.round(H * 0.006));
+  y += titleFont + Math.max(2, Math.round(H * 0.008));
   ctx.font = `${titleFont}px Arial`;
   const remaining = Math.max(0, H - y - 2);
-  const lineStep = titleFont + 1;
+  const lineStep = titleFont + Math.max(1, Math.round(titleFont * 0.10));
   const maxLinesByRoom = Math.max(1, Math.floor(remaining / lineStep) + 1);
   const maxLinesWanted = 3;
   const maxLines = Math.max(1, Math.min(maxLinesWanted, maxLinesByRoom));
   const lines = wrapM110Text(ctx, match.productName || '', W - side * 2, maxLines);
   const blockHeight = Math.max(0, (lines.length - 1) * lineStep);
   const extraDown = Math.max(0, H - 4 - y - blockHeight);
-  y += Math.min(extraDown, Math.round(H * 0.10));
+  // Descend légèrement davantage le bloc description pour utiliser le vide.
+  y += Math.min(extraDown, Math.round(H * 0.16));
   for (const line of lines) {
     if (y > H - 2) break;
     ctx.fillText(line, W / 2, y);
@@ -4532,14 +4744,16 @@ window.addEventListener("DOMContentLoaded", () => {
   restoreAutoPrintSingleUi();
   restoreM110SpeedUi();
   restoreM110LayoutUi();
+  updateM110LastReconnectButton();
   updateM110Buttons();
   refreshKnownM110Devices();
-  // Si une seule M110 a déjà été autorisée, tente une reconnexion discrète.
-  setTimeout(() => connectFirstKnownM110(), 350);
+  // Reconnexion silencieuse conservée ; le bouton reste disponible quoi qu'il arrive.
+  setTimeout(() => connectFirstKnownM110(), 450);
   initStorageMode();
   initCloudSync();
   initTeamWorkflow();
 
+  document.getElementById('m110LastReconnectBtn').addEventListener('click', reconnectLastM110);
   document.getElementById('connectM110').addEventListener('click', () => connectM110(false));
   document.getElementById('connectM110All').addEventListener('click', () => connectM110(true));
   document.getElementById('disconnectM110').addEventListener('click', disconnectM110);
@@ -4559,12 +4773,12 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 // =============================================================
-// V26 — MISE À JOUR / CACHE FIABLE
+// V28 — MISE À JOUR / CACHE FIABLE
 // - le navigateur vérifie toujours la dernière version de sw.js
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "26.0.0";
+const APP_VERSION = "28.0.0";
 try {
   const el = document.getElementById('appVersionText');
   if (el) el.textContent = `v${APP_VERSION}`;
@@ -4599,7 +4813,7 @@ async function installFreshServiceWorker() {
       location.reload();
     });
   } catch (err) {
-    console.warn("Service worker V26 non disponible :", err);
+    console.warn("Service worker V28 non disponible :", err);
   }
 }
 
