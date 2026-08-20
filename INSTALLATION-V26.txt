@@ -1,0 +1,28 @@
+V26 — MARGE DE SÉCURITÉ CODE-BARRES 49/50 × 30 MM
+
+À mettre sur GitHub :
+- index.html
+- sw.js
+
+Aucun changement Google Sheets / Apps Script.
+
+Correction :
+- en 49/50 × 30 mm, le code-barres M110 ne peut plus aller presque jusqu'au bord ;
+- largeur maximale du code-barres ≈ 43,5 mm ;
+- centrage automatique ;
+- vraie marge blanche à gauche ET à droite ;
+- le texte (suivi, ASIN, code, description) garde la mise en page V25 ;
+- les 6 modes de débit Bluetooth V25 sont conservés, dont Extra Extra Safe ;
+- la connexion Bluetooth robuste V24/V25 est conservée ;
+- le PDF 50 mm reçoit également une marge latérale plus sûre.
+
+Pourquoi ~43,5 mm :
+La tête M110 imprime environ 48 mm. V26 réserve environ 2,25 mm blancs
+de chaque côté dans cette zone imprimable. Sur une étiquette physique de
+50 mm, on obtient environ 3,25 mm de marge par côté.
+
+Après mise à jour :
+1. Ouvre https://222-ipg.github.io/?v=26
+2. Vérifie « Version actuelle : v26.0.0 »
+3. Imprime une étiquette 50×30.
+4. Vérifie surtout le bord droit du code-barres.

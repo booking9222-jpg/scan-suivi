@@ -325,7 +325,7 @@
 <!-- V21 : M110 Ultra sûr 128 octets, optimisé 1-13 -->
 
 <h1>📦 Vine : ouverture → M110 → rangement synchronisé</h1>
-<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v24</strong></div>
+<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v26</strong></div>
 
 <div class="team-workflow-card" id="teamWorkflowCard">
   <div class="team-workflow-title">⚙️ Organisation du travail</div>
@@ -406,6 +406,7 @@
           <option value="fast">Rapide 128</option>
           <option value="normal">Normal</option>
           <option value="safe">🛡️ Compatible</option>
+          <option value="extrasafe">🧱 Extra Extra Safe — priorité fiabilité</option>
         </select>
       </label>
       <button class="btn printer-btn secondary" id="testM110Burst">🧪 Test 3 étiquettes</button>
@@ -417,7 +418,7 @@
       Si la M110 saute encore une étiquette blanche, charge le rouleau bien droit puis appuie une fois sur le bouton d'avance papier pour qu'elle reconnaisse le format avant de relancer le test de 3 étiquettes.
     </div>
     <div id="m110TransportInfo" class="mini-note" style="margin-top:5px; font-weight:700; color:#0d47a1;">
-      Transport : 128 octets fixe — aucune tentative 256.
+      Transport : 128 octets maximum. Extra Extra Safe descend à 64 octets.
     </div>
   </div>
   <div style="margin-top:10px; padding:10px; border:1px solid #eadcff; border-radius:9px; background:#fcf8ff;">
@@ -693,7 +694,10 @@ const M110_SPEED_PROFILES = {
     betweenLabels: 240,
     afterFooter: 430,
     cooldownEvery: 5,
-    cooldownMs: 90
+    cooldownMs: 90,
+    microBatchSize: 5,
+    microBatchPause: 950,
+    forceResponse: false
   },
   turbo: {
     label: '🚀 Turbo fiable 128',
@@ -705,7 +709,10 @@ const M110_SPEED_PROFILES = {
     betweenLabels: 340,
     afterFooter: 560,
     cooldownEvery: 5,
-    cooldownMs: 110
+    cooldownMs: 110,
+    microBatchSize: 5,
+    microBatchPause: 950,
+    forceResponse: false
   },
   fast: {
     label: 'Rapide 128',
@@ -717,7 +724,10 @@ const M110_SPEED_PROFILES = {
     betweenLabels: 500,
     afterFooter: 700,
     cooldownEvery: 0,
-    cooldownMs: 0
+    cooldownMs: 0,
+    microBatchSize: 5,
+    microBatchPause: 950,
+    forceResponse: false
   },
   normal: {
     label: 'Normal',
@@ -729,7 +739,10 @@ const M110_SPEED_PROFILES = {
     betweenLabels: 560,
     afterFooter: 750,
     cooldownEvery: 0,
-    cooldownMs: 0
+    cooldownMs: 0,
+    microBatchSize: 5,
+    microBatchPause: 950,
+    forceResponse: false
   },
   safe: {
     label: '🛡️ Compatible',
@@ -741,7 +754,27 @@ const M110_SPEED_PROFILES = {
     betweenLabels: 680,
     afterFooter: 900,
     cooldownEvery: 0,
-    cooldownMs: 0
+    cooldownMs: 0,
+    microBatchSize: 5,
+    microBatchPause: 950,
+    forceResponse: false
+  },
+  extrasafe: {
+    label: '🧱 Extra Extra Safe',
+    chunkSize: 64,
+    burstSize: 1,
+    burstDelay: 28,
+    commandDelay: 55,
+    beforeFooter: 500,
+    betweenLabels: 1200,
+    afterFooter: 1700,
+    cooldownEvery: 0,
+    cooldownMs: 0,
+    microBatchSize: 1,
+    microBatchPause: 1400,
+    preRasterDelay: 180,
+    lastLabelPreDelay: 700,
+    forceResponse: true
   }
 };
 
@@ -777,11 +810,11 @@ function updateM110LayoutHint() {
   try { localStorage.setItem(M110_LAYOUT_PROFILE_KEY, value); } catch (_) {}
   if (!hint) return;
   if (value === 'xxl') {
-    hint.textContent = 'Code-barres XXL : priorité maximale au scan. Le code-barres devient plus large et plus haut ; le titre est plus compact.';
+    hint.textContent = 'Code-barres XXL : priorité au scan. En 49/50×30 mm, la V26 conserve malgré tout une marge blanche de sécurité à gauche et à droite.';
   } else if (value === 'normal') {
-    hint.textContent = 'Normal : mise en page équilibrée entre texte et code-barres.';
+    hint.textContent = 'Normal : mise en page équilibrée. En 49/50×30 mm, le code-barres est limité à environ 43,5 mm pour ne plus toucher le bord.';
   } else {
-    hint.textContent = 'Code-barres large : le code prend davantage de largeur et de hauteur. Le descriptif est un peu plus compact pour améliorer la netteté et la lisibilité au scan.';
+    hint.textContent = 'Code-barres large : grand et lisible, mais en 49/50×30 mm la V26 garde automatiquement une marge blanche de sécurité des deux côtés.';
   }
 }
 
@@ -811,8 +844,10 @@ function updateM110SpeedHint() {
     hint.textContent = "Ultra sûr 128 : uniquement 128 octets, mini-rafales de 2, pause courte entre étiquettes et micro-pause automatique toutes les 5 étiquettes.";
   } else if (select.value === 'turbo') {
     hint.textContent = "Turbo fiable 128 : même transport sûr en 128 octets, avec un peu plus de marge entre les étiquettes.";
+  } else if (select.value === 'extrasafe') {
+    hint.textContent = "Extra Extra Safe : priorité maximale à la fiabilité. Paquets de 64 octets, une seule écriture à la fois, accusé de réception GATT si disponible, réinitialisation avant chaque étiquette et longues pauses de vidage du tampon. C'est volontairement beaucoup plus lent.";
   } else if (select.value === 'safe') {
-    hint.textContent = 'Compatible : le plus prudent si un téléphone Bluetooth est instable.';
+    hint.textContent = 'Compatible : très prudent, mais moins conservateur que Extra Extra Safe.';
   } else if (select.value === 'normal') {
     hint.textContent = 'Normal : mode conservateur.';
   } else {
@@ -1257,6 +1292,20 @@ async function m110Send(bytes) {
   }
 }
 
+async function m110SendProfile(bytes, profile = null) {
+  const p = profile || getM110SpeedProfile();
+  const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+
+  // Extra Extra Safe demande un accusé GATT à chaque écriture quand
+  // la caractéristique Bluetooth de la M110 le permet.
+  if (p.forceResponse && m110WriteChar?.properties?.write) {
+    await m110WriteChar.writeValue(data);
+    return;
+  }
+
+  await m110Send(data);
+}
+
 function setM110TransportInfo(text) {
   const el = document.getElementById('m110TransportInfo');
   if (el) el.textContent = text;
@@ -1264,7 +1313,7 @@ function setM110TransportInfo(text) {
 
 async function sendRasterPayloadM110(data, profile, onProgress = null) {
   const total = data.length;
-  const chunkSize = 128; // V21 : fixe, jamais 256.
+  const chunkSize = Math.max(32, Math.min(128, Number(profile.chunkSize || 128)));
   let offset = 0;
   let burstCount = 0;
   let writes = 0;
@@ -1272,7 +1321,8 @@ async function sendRasterPayloadM110(data, profile, onProgress = null) {
   while (offset < total) {
     const end = Math.min(offset + chunkSize, total);
     const chunk = data.slice(offset, end);
-    await m110Send(chunk);
+
+    await m110SendProfile(chunk, profile);
 
     offset = end;
     writes++;
@@ -1287,7 +1337,7 @@ async function sendRasterPayloadM110(data, profile, onProgress = null) {
     }
   }
 
-  return { chunkSize: 128, writes };
+  return { chunkSize, writes };
 }
 
 function mmToDots(mm) {
@@ -1389,7 +1439,8 @@ async function printRasterM110(raster, density = 6, onProgress = null) {
   await sleep(profile.afterFooter);
 
   const elapsed = Math.round(performance.now() - startedAt);
-  setM110TransportInfo(`Transport : 128 octets fixe · ${transport.writes} écritures · ${(elapsed / 1000).toFixed(2)} s.`);
+  const responseText = profile.forceResponse && m110WriteChar?.properties?.write ? ' · accusés GATT' : '';
+  setM110TransportInfo(`Transport : ${transport.chunkSize} octets/paquet · ${transport.writes} écritures${responseText} · ${(elapsed / 1000).toFixed(2)} s.`);
   return elapsed;
 }
 
@@ -1451,7 +1502,17 @@ function generateM110LabelCanvas(match, trackingValue) {
   const barcodeValue = String(match.pdfBarcodeValue || match.asin || '');
   const targetBh = Math.max(62, Math.round(H * (is30High ? layout.barcodeHeight30 : layout.barcodeHeightOther)));
   const barcodeTop = y + Math.max(4, Math.round(H * 0.015));
-  const maxBw = W - side * 2;
+
+  // V26 — sécurité spécifique aux étiquettes 49/50 × 30 mm.
+  // La tête M110 imprime ~48 mm : on réserve au minimum 2,25 mm blancs
+  // de chaque côté DANS la zone imprimable. Sur une étiquette de 50 mm,
+  // cela donne environ 3,25 mm de marge physique par côté.
+  // Largeur maxi du code-barres : ~43,5 mm.
+  const isWide30Label = size.width >= 49 && size.height <= 32;
+  const barcodeSafeSide = isWide30Label
+    ? Math.max(side, mmToDots(2.25))
+    : side;
+  const maxBw = W - barcodeSafeSide * 2;
   const maxBh = targetBh;
   const candidates = (size.width >= 49 ? layout.moduleCandidates50 : layout.moduleCandidates40) || [2, 1];
 
@@ -1478,7 +1539,8 @@ function generateM110LabelCanvas(match, trackingValue) {
     dw = Math.max(1, Math.floor(dw * scale));
     dh = Math.max(1, Math.floor(dh * scale));
   }
-  ctx.drawImage(bc, Math.round((W - dw) / 2), barcodeTop, dw, dh);
+  const barcodeX = Math.round((W - dw) / 2);
+  ctx.drawImage(bc, barcodeX, barcodeTop, dw, dh);
 
   y = barcodeTop + dh + Math.max(Math.round(H * 0.040), asinFont - 2);
   ctx.textAlign = 'center';
@@ -1527,7 +1589,7 @@ async function printRasterBatchM110(rasters, density = 6, onLabelProgress = null
   // V24 : la M110 devient parfois instable après 5 étiquettes rapides.
   // On limite donc chaque sous-lot à 5 puis on laisse le tampon se vider
   // et on réinitialise proprement les réglages avant de continuer.
-  const MICRO_BATCH_SIZE = 5;
+  const MICRO_BATCH_SIZE = Math.max(1, Number(profile.microBatchSize || 5));
   const microBatches = Math.ceil(list.length / MICRO_BATCH_SIZE);
   let totalWrites = 0;
   let globalIndex = 0;
@@ -1605,7 +1667,7 @@ async function printRasterBatchM110(rasters, density = 6, onLabelProgress = null
   const elapsedMs = Math.round(performance.now() - startedAt);
   return {
     elapsedMs,
-    chunkSize: 128,
+    chunkSize: Math.max(32, Math.min(128, Number(profile.chunkSize || 128))),
     writes: totalWrites,
     microBatches
   };
@@ -1646,8 +1708,9 @@ function queueM110Print(matches, trackingValue) {
       const density = Number(document.getElementById('m110Density')?.value || 6);
       const rasters = copy.map(item => rasterizeM110Match(item, trackingValue));
       setM110Progress(0, true);
-      const microBatchCount = Math.ceil(copy.length / 5);
-      const batchInfo = copy.length >= 6 ? ` · ${microBatchCount} sous-lots sécurisés` : '';
+      const microBatchSize = Math.max(1, Number(profile.microBatchSize || 5));
+      const microBatchCount = Math.ceil(copy.length / microBatchSize);
+      const batchInfo = microBatchCount > 1 ? ` · ${microBatchCount} sous-lots sécurisés de max. ${microBatchSize}` : '';
       setM110Status(`📦 Envoi groupé de ${copy.length} étiquette(s)${batchInfo} — ${size.width}×${size.height} mm — ${profile.label}…`, 'wait');
       const result = await printRasterBatchM110(rasters, density, (done, total) => {
         const pct = Math.round(done / total * 100);
@@ -1661,8 +1724,9 @@ function queueM110Print(matches, trackingValue) {
       const seconds = secondsNum.toFixed(1);
       const perLabel = (secondsNum / copy.length).toFixed(2);
       setM110Status(`✅ ${copy.length} étiquette(s) en ${seconds} s (${perLabel} s/étiquette) — ${profile.label}.`, 'ok');
-      const splitText = result.microBatches > 1 ? ` · ${result.microBatches} sous-lots de max. 5` : '';
-      setM110TransportInfo(`Transport : 128 octets fixe · ${result.writes} écritures · lot groupé${splitText}.`);
+      const splitText = result.microBatches > 1 ? ` · ${result.microBatches} sous-lots` : '';
+      const responseText = profile.forceResponse && m110WriteChar?.properties?.write ? ' · accusés GATT' : '';
+      setM110TransportInfo(`Transport : ${result.chunkSize} octets/paquet · ${result.writes} écritures${responseText}${splitText}.`);
       if (navigator.vibrate) navigator.vibrate([80, 40, 80]);
     } catch (err) {
       console.error('M110 print error:', err);
@@ -4495,12 +4559,12 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 // =============================================================
-// V24 — MISE À JOUR / CACHE FIABLE
+// V26 — MISE À JOUR / CACHE FIABLE
 // - le navigateur vérifie toujours la dernière version de sw.js
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "24.0.0";
+const APP_VERSION = "26.0.0";
 try {
   const el = document.getElementById('appVersionText');
   if (el) el.textContent = `v${APP_VERSION}`;
@@ -4535,7 +4599,7 @@ async function installFreshServiceWorker() {
       location.reload();
     });
   } catch (err) {
-    console.warn("Service worker V24 non disponible :", err);
+    console.warn("Service worker V26 non disponible :", err);
   }
 }
 
