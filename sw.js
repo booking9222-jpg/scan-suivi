@@ -1,5 +1,5 @@
-/* Scanner Suivi → ASIN → M110 — Service Worker V29 */
-const VERSION = '29.0.0';
+/* Scanner Suivi → ASIN → M110 — Service Worker V30 */
+const VERSION = '30.0.0';
 const CACHE_NAME = `vine-m110-${VERSION}`;
 const APP_SHELL = [
   './',
@@ -30,7 +30,7 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
-    // Supprime uniquement les anciennes versions créées par ce SW V29+.
+    // Supprime uniquement les anciennes versions créées par ce SW V30+.
     const keys = await caches.keys();
     await Promise.all(keys
       .filter((key) => key.startsWith('vine-m110-') && key !== CACHE_NAME)

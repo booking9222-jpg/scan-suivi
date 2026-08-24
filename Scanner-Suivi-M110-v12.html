@@ -396,7 +396,7 @@
 <!-- V21 : M110 Ultra sûr 128 octets, optimisé 1-13 -->
 
 <h1>📦 Vine : ouverture → M110 → rangement synchronisé</h1>
-<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v29</strong></div>
+<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v30</strong></div>
 
 <div class="team-workflow-card" id="teamWorkflowCard">
   <div class="team-workflow-title">⚙️ Organisation du travail</div>
@@ -508,6 +508,20 @@
     </div>
     <div id="m110TransportInfo" class="mini-note" style="margin-top:5px; font-weight:700; color:#0d47a1;">
       Transport : 128 octets maximum. Extra Extra Safe descend à 64 octets.
+    </div>
+
+    <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;font-weight:900;color:#4527a0;">
+      <input type="checkbox" id="m110AdaptiveSpeed" checked>
+      🧠 Débit adaptatif automatique
+    </label>
+    <div id="m110AdaptiveStatus" class="mini-note" style="margin-top:5px;color:#4527a0;font-weight:800;">
+      En cas d'erreur Bluetooth pendant un lot, la V30 passe automatiquement au mode plus sûr et le mémorise pour cette imprimante.
+    </div>
+    <div id="m110PreflightInfo" class="mini-note" style="margin-top:5px;color:#00695c;font-weight:800;">
+      🩺 Pré-test Bluetooth : automatique avant les lots de 6 étiquettes ou plus.
+    </div>
+    <div id="m110PrinterProfileInfo" class="mini-note" style="margin-top:5px;color:#5d4037;font-weight:800;">
+      💾 Profil imprimante : sera mémorisé après connexion.
     </div>
   </div>
   <div style="margin-top:10px; padding:10px; border:1px solid #eadcff; border-radius:9px; background:#fcf8ff;">
@@ -969,7 +983,334 @@ let m110WriteChar = null;
 let m110UseWriteWithResponse = false;
 let m110PrintQueue = Promise.resolve();
 
+// V30 — santé connexion / adaptation
+let m110ConnectedAt = 0;
+let m110LastIoAt = 0;
+let m110LastTransportErrorAt = 0;
+let m110DisconnectGeneration = 0;
+let m110BatchInProgress = false;
+let m110AdaptiveIssueHandledForBatch = false;
+let m110ApplyingPrinterProfile = false;
+
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+
+const M110_PRINTER_PROFILES_KEY = 'vine-m110-printer-profiles-v30';
+const M110_ADAPTIVE_DEFAULT_KEY = 'vine-m110-adaptive-default-v30';
+
+function getM110PrinterKey(device = m110Device) {
+  if (!device) return '';
+  return String(device.id || device.name || '').trim();
+}
+
+function readM110PrinterProfiles() {
+  try {
+    return JSON.parse(localStorage.getItem(M110_PRINTER_PROFILES_KEY) || '{}') || {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function writeM110PrinterProfiles(profiles) {
+  try {
+    localStorage.setItem(M110_PRINTER_PROFILES_KEY, JSON.stringify(profiles || {}));
+  } catch (_) {}
+}
+
+function isM110AdaptiveEnabled() {
+  const el = document.getElementById('m110AdaptiveSpeed');
+  return el ? !!el.checked : true;
+}
+
+function restoreM110AdaptiveDefaultUi() {
+  const el = document.getElementById('m110AdaptiveSpeed');
+  if (!el) return;
+  try {
+    const saved = localStorage.getItem(M110_ADAPTIVE_DEFAULT_KEY);
+    el.checked = saved === null ? true : saved === '1';
+  } catch (_) {
+    el.checked = true;
+  }
+  updateM110AdaptiveStatus();
+}
+
+function setM110PreflightInfo(text, state = 'ok') {
+  const el = document.getElementById('m110PreflightInfo');
+  if (!el) return;
+  const prefix = state === 'err' ? '❌' : state === 'wait' ? '🩺' : '✅';
+  el.textContent = `${prefix} ${text}`;
+  el.style.color = state === 'err' ? '#b71c1c' : state === 'wait' ? '#00695c' : '#1b5e20';
+}
+
+function updateM110AdaptiveStatus(extra = '') {
+  const el = document.getElementById('m110AdaptiveStatus');
+  if (!el) return;
+
+  const enabled = isM110AdaptiveEnabled();
+  const speedValue = document.getElementById('m110SpeedProfile')?.value || 'turbo';
+  const speed = M110_SPEED_PROFILES[speedValue] || M110_SPEED_PROFILES.turbo;
+
+  if (!enabled) {
+    el.textContent = '🧠 Adaptatif désactivé : le débit choisi restera fixe, même après une erreur Bluetooth.';
+    el.style.color = '#616161';
+    return;
+  }
+
+  el.textContent = `🧠 Adaptatif actif : ${speed.label}. En cas d'erreur/reconnexion pendant un lot, passage automatique au mode plus sûr.${extra ? ' ' + extra : ''}`;
+  el.style.color = '#4527a0';
+}
+
+function captureCurrentM110PrinterProfile(device = m110Device) {
+  if (!device) return null;
+  const size = getSelectedLabelSize();
+  return {
+    deviceId: device.id || '',
+    deviceName: device.name || 'M110',
+    speed: document.getElementById('m110SpeedProfile')?.value || 'turbo',
+    density: document.getElementById('m110Density')?.value || '6',
+    layout: document.getElementById('m110LayoutProfile')?.value || 'wide',
+    labelPreset: document.getElementById('labelSizePreset')?.value || '40x30',
+    customWidth: Number(document.getElementById('customLabelWidth')?.value || size.width || 40),
+    customHeight: Number(document.getElementById('customLabelHeight')?.value || size.height || 30),
+    adaptive: isM110AdaptiveEnabled(),
+    updatedAt: Date.now()
+  };
+}
+
+function saveCurrentM110PrinterProfile(reason = '') {
+  if (m110ApplyingPrinterProfile || !m110Device) return;
+  const key = getM110PrinterKey(m110Device);
+  if (!key) return;
+
+  const profiles = readM110PrinterProfiles();
+  const previous = profiles[key] || {};
+  const current = captureCurrentM110PrinterProfile(m110Device);
+  if (!current) return;
+
+  profiles[key] = {
+    ...previous,
+    ...current,
+    // Conserve les statistiques adaptatives déjà enregistrées.
+    successBatches: Number(previous.successBatches || 0),
+    successLabels: Number(previous.successLabels || 0),
+    transportErrors: Number(previous.transportErrors || 0),
+    lastSuccessAt: previous.lastSuccessAt || 0,
+    lastErrorAt: previous.lastErrorAt || 0,
+    lastReason: reason || previous.lastReason || ''
+  };
+  writeM110PrinterProfiles(profiles);
+  updateM110PrinterProfileInfo();
+}
+
+function updateM110PrinterProfileInfo() {
+  const el = document.getElementById('m110PrinterProfileInfo');
+  if (!el) return;
+
+  if (!m110Device) {
+    el.textContent = '💾 Profil imprimante : sera mémorisé après connexion.';
+    return;
+  }
+
+  const key = getM110PrinterKey(m110Device);
+  const profile = readM110PrinterProfiles()[key];
+  const name = m110Device.name || 'M110';
+
+  if (!profile) {
+    el.textContent = `💾 ${name} : nouveau profil — les réglages actuels seront mémorisés.`;
+    return;
+  }
+
+  const speed = M110_SPEED_PROFILES[profile.speed]?.label || profile.speed || '—';
+  const label =
+    profile.labelPreset === 'custom'
+      ? `${profile.customWidth || 40}×${profile.customHeight || 30}`
+      : String(profile.labelPreset || '40x30').replace('x', '×');
+
+  el.textContent =
+    `💾 ${name} : ${label} mm · densité ${profile.density || 6} · ${speed} · ` +
+    `${profile.layout || 'wide'} · adaptatif ${profile.adaptive === false ? 'OFF' : 'ON'}.`;
+}
+
+function applyM110PrinterProfile(device = m110Device) {
+  if (!device) return false;
+  const key = getM110PrinterKey(device);
+  if (!key) return false;
+
+  const profiles = readM110PrinterProfiles();
+  const profile = profiles[key];
+
+  if (!profile) {
+    // Première connexion avec cette imprimante : on mémorise les réglages actuels.
+    saveCurrentM110PrinterProfile('première connexion');
+    return false;
+  }
+
+  m110ApplyingPrinterProfile = true;
+  try {
+    const speedEl = document.getElementById('m110SpeedProfile');
+    const densityEl = document.getElementById('m110Density');
+    const layoutEl = document.getElementById('m110LayoutProfile');
+    const presetEl = document.getElementById('labelSizePreset');
+    const widthEl = document.getElementById('customLabelWidth');
+    const heightEl = document.getElementById('customLabelHeight');
+    const adaptiveEl = document.getElementById('m110AdaptiveSpeed');
+
+    if (speedEl && M110_SPEED_PROFILES[profile.speed]) speedEl.value = profile.speed;
+    if (densityEl && ['4','5','6','7','8'].includes(String(profile.density))) densityEl.value = String(profile.density);
+    if (layoutEl && M110_LAYOUT_PROFILES[profile.layout]) layoutEl.value = profile.layout;
+    if (presetEl && ['40x30','50x30','custom'].includes(profile.labelPreset)) presetEl.value = profile.labelPreset;
+    if (widthEl && profile.customWidth) widthEl.value = profile.customWidth;
+    if (heightEl && profile.customHeight) heightEl.value = profile.customHeight;
+    if (adaptiveEl && typeof profile.adaptive === 'boolean') adaptiveEl.checked = profile.adaptive;
+
+    updateLabelSizeUi();
+    updateM110SpeedHint();
+    updateM110LayoutHint();
+    updateM110AdaptiveStatus('Profil restauré automatiquement pour cette imprimante.');
+  } finally {
+    m110ApplyingPrinterProfile = false;
+  }
+
+  updateM110PrinterProfileInfo();
+  return true;
+}
+
+function getNextSaferM110Speed(value) {
+  const map = {
+    ultra128: 'turbo',
+    turbo: 'normal',
+    fast: 'normal',
+    normal: 'safe',
+    safe: 'extrasafe',
+    extrasafe: 'extrasafe'
+  };
+  return map[value] || 'normal';
+}
+
+function handleM110AdaptiveTransportIssue(reason = 'erreur Bluetooth') {
+  m110LastTransportErrorAt = Date.now();
+
+  if (!isM110AdaptiveEnabled()) {
+    updateM110AdaptiveStatus(`Erreur détectée : ${reason}.`);
+    return false;
+  }
+
+  if (m110AdaptiveIssueHandledForBatch) return false;
+  m110AdaptiveIssueHandledForBatch = true;
+
+  const select = document.getElementById('m110SpeedProfile');
+  if (!select) return false;
+
+  const previousValue = select.value || 'turbo';
+  const saferValue = getNextSaferM110Speed(previousValue);
+  const previousLabel = M110_SPEED_PROFILES[previousValue]?.label || previousValue;
+  const saferLabel = M110_SPEED_PROFILES[saferValue]?.label || saferValue;
+
+  const key = getM110PrinterKey(m110Device);
+  const profiles = readM110PrinterProfiles();
+  const stats = key ? (profiles[key] || {}) : {};
+
+  if (key) {
+    profiles[key] = {
+      ...stats,
+      transportErrors: Number(stats.transportErrors || 0) + 1,
+      lastErrorAt: Date.now(),
+      lastReason: reason
+    };
+    writeM110PrinterProfiles(profiles);
+  }
+
+  if (saferValue !== previousValue) {
+    select.value = saferValue;
+    updateM110SpeedHint();
+    saveCurrentM110PrinterProfile(`adaptatif : ${reason}`);
+    updateM110AdaptiveStatus(`⚠️ ${previousLabel} → ${saferLabel} mémorisé pour cette imprimante.`);
+    setM110TransportInfo(`🧠 Erreur détectée : prochain lot en ${saferLabel}.`);
+    return true;
+  }
+
+  updateM110AdaptiveStatus(`⚠️ Déjà au niveau de sécurité maximal (${saferLabel}).`);
+  return false;
+}
+
+function recordM110AdaptiveSuccess(labelCount) {
+  if (!m110Device) return;
+
+  const key = getM110PrinterKey(m110Device);
+  if (!key) return;
+
+  const profiles = readM110PrinterProfiles();
+  const previous = profiles[key] || {};
+  profiles[key] = {
+    ...previous,
+    ...captureCurrentM110PrinterProfile(m110Device),
+    successBatches: Number(previous.successBatches || 0) + 1,
+    successLabels: Number(previous.successLabels || 0) + Number(labelCount || 0),
+    transportErrors: Number(previous.transportErrors || 0),
+    lastSuccessAt: Date.now()
+  };
+  writeM110PrinterProfiles(profiles);
+  updateM110PrinterProfileInfo();
+}
+
+async function preflightM110Batch(labelCount) {
+  if (Number(labelCount || 0) < 6) {
+    setM110PreflightInfo('Pré-test Bluetooth : non nécessaire pour moins de 6 étiquettes.', 'ok');
+    return true;
+  }
+
+  setM110PreflightInfo(`Pré-test Bluetooth avant ${labelCount} étiquettes…`, 'wait');
+
+  let device = m110Device;
+  if (!device) device = await findLastAuthorizedM110();
+
+  if (!device) {
+    setM110PreflightInfo('Pré-test impossible : imprimante non autorisée / introuvable.', 'err');
+    return false;
+  }
+
+  const now = Date.now();
+  const connectionAge = m110ConnectedAt ? now - m110ConnectedAt : Number.POSITIVE_INFINITY;
+  const recentError =
+    m110LastTransportErrorAt &&
+    (now - m110LastTransportErrorAt) < 10 * 60 * 1000;
+
+  const staleSession =
+    !isM110Connected() ||
+    !m110WriteChar ||
+    connectionAge > 3 * 60 * 1000 ||
+    recentError;
+
+  if (staleSession) {
+    const why =
+      !isM110Connected()
+        ? 'connexion absente'
+        : recentError
+          ? 'erreur Bluetooth récente'
+          : 'session GATT ancienne';
+
+    setM110PreflightInfo(`Pré-test : ${why} → reconnexion propre avant le lot…`, 'wait');
+
+    try {
+      // finishM110Connection force une nouvelle session GATT.
+      await finishM110Connection(device, true, 3);
+    } catch (err) {
+      setM110PreflightInfo(`Pré-test échoué : ${err.message || err}`, 'err');
+      handleM110AdaptiveTransportIssue('échec pré-test Bluetooth');
+      return false;
+    }
+  }
+
+  if (!isM110Connected() || !m110WriteChar) {
+    setM110PreflightInfo('Pré-test échoué : canal d’écriture M110 indisponible.', 'err');
+    handleM110AdaptiveTransportIssue('canal GATT indisponible');
+    return false;
+  }
+
+  const ageSeconds = Math.max(0, Math.round((Date.now() - m110ConnectedAt) / 1000));
+  setM110PreflightInfo(`Pré-test OK : M110 connectée, canal GATT prêt (${ageSeconds}s).`, 'ok');
+  return true;
+}
 
 function setM110Status(text, type = 'wait') {
   const el = document.getElementById('m110Status');
@@ -1452,6 +1793,11 @@ function bindM110DisconnectListener(device) {
   device.__vineM110DisconnectBound = true;
 
   device.addEventListener('gattserverdisconnected', () => {
+    m110DisconnectGeneration++;
+    if (m110BatchInProgress) {
+      handleM110AdaptiveTransportIssue('déconnexion pendant le lot');
+    }
+
     m110Server = null;
     m110Service = null;
     m110WriteChar = null;
@@ -1538,8 +1884,16 @@ async function finishM110Connection(device, silent = false, maxAttempts = 3) {
       await discoverM110WriteCharacteristic(device);
 
       rememberLastM110Device(device);
+      m110ConnectedAt = Date.now();
+      m110LastIoAt = Date.now();
+
+      // V30 : chaque imprimante retrouve automatiquement ses propres réglages.
+      applyM110PrinterProfile(device);
+      saveCurrentM110PrinterProfile('connexion réussie');
+
       setM110Status(`✅ ${device.name || 'M110'} connectée — prête à imprimer`, 'ok');
       updateM110Buttons();
+      updateM110PrinterProfileInfo();
       await refreshLastM110AuthorizationState();
       refreshKnownM110Devices();
       return true;
@@ -1672,6 +2026,7 @@ function disconnectM110() {
   m110Server = null;
   m110Service = null;
   m110WriteChar = null;
+  m110ConnectedAt = 0;
   setM110Status('M110 non connectée. Touchez son nom dans « Connexion rapide » pour reconnecter.', 'wait');
   setM110Progress(0, false);
   updateM110Buttons();
@@ -1682,15 +2037,22 @@ function disconnectM110() {
 async function m110Send(bytes) {
   if (!isM110Connected()) throw new Error('M110 non connectée');
   const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  if (m110UseWriteWithResponse) {
-    await m110WriteChar.writeValue(data);
-  } else {
-    try {
-      await m110WriteChar.writeValueWithoutResponse(data);
-    } catch (_) {
-      m110UseWriteWithResponse = true;
+
+  try {
+    if (m110UseWriteWithResponse) {
       await m110WriteChar.writeValue(data);
+    } else {
+      try {
+        await m110WriteChar.writeValueWithoutResponse(data);
+      } catch (_) {
+        m110UseWriteWithResponse = true;
+        await m110WriteChar.writeValue(data);
+      }
     }
+    m110LastIoAt = Date.now();
+  } catch (err) {
+    m110LastTransportErrorAt = Date.now();
+    throw err;
   }
 }
 
@@ -1776,6 +2138,8 @@ function updateLabelSizeUi() {
     localStorage.setItem('m110CustomWidth', String(size.width));
     localStorage.setItem('m110CustomHeight', String(size.height));
   } catch (_) {}
+
+  saveCurrentM110PrinterProfile('taille étiquette');
 }
 
 function restoreLabelSizeUi() {
@@ -2100,43 +2464,102 @@ async function manualPrintM110(matches, trackingValue) {
 function queueM110Print(matches, trackingValue) {
   const copy = Array.isArray(matches) ? matches.slice() : [];
   if (!copy.length) return Promise.resolve();
+
   if (!isM110Connected()) {
     setM110Status('⚠️ M110 non connectée. Appuyez de nouveau sur Imprimer pour vous connecter.', 'err');
     return Promise.resolve();
   }
 
   m110PrintQueue = m110PrintQueue.then(async () => {
+    m110AdaptiveIssueHandledForBatch = false;
+
     try {
+      // V30 : contrôle / reconnexion propre avant tout lot de 6+.
+      const preflightOk = await preflightM110Batch(copy.length);
+      if (!preflightOk) {
+        setM110Status('❌ Lot annulé avant impression : pré-test Bluetooth non validé.', 'err');
+        return;
+      }
+
+      // Le pré-test peut avoir reconnecté l'imprimante et restauré son profil :
+      // on lit donc les réglages APRÈS le pré-test.
       const size = getSelectedLabelSize();
       const profile = getM110SpeedProfile();
       const density = Number(document.getElementById('m110Density')?.value || 6);
       const rasters = copy.map(item => rasterizeM110Match(item, trackingValue));
+
       setM110Progress(0, true);
       const microBatchSize = Math.max(1, Number(profile.microBatchSize || 5));
       const microBatchCount = Math.ceil(copy.length / microBatchSize);
-      const batchInfo = microBatchCount > 1 ? ` · ${microBatchCount} sous-lots sécurisés de max. ${microBatchSize}` : '';
-      setM110Status(`📦 Envoi groupé de ${copy.length} étiquette(s)${batchInfo} — ${size.width}×${size.height} mm — ${profile.label}…`, 'wait');
-      const result = await printRasterBatchM110(rasters, density, (done, total) => {
-        const pct = Math.round(done / total * 100);
-        setM110Progress(pct, true);
-        setM110Status(`🖨️ Lot M110 : ${done}/${total} envoyée(s) — ${profile.label}…`, 'wait');
-      });
+      const batchInfo =
+        microBatchCount > 1
+          ? ` · ${microBatchCount} sous-lots sécurisés de max. ${microBatchSize}`
+          : '';
+
+      setM110Status(
+        `📦 Envoi groupé de ${copy.length} étiquette(s)${batchInfo} — ${size.width}×${size.height} mm — ${profile.label}…`,
+        'wait'
+      );
+
+      const disconnectGenerationAtStart = m110DisconnectGeneration;
+      m110BatchInProgress = true;
+
+      let result;
+      try {
+        result = await printRasterBatchM110(rasters, density, (done, total) => {
+          const pct = Math.round(done / total * 100);
+          setM110Progress(pct, true);
+          setM110Status(`🖨️ Lot M110 : ${done}/${total} envoyée(s) — ${profile.label}…`, 'wait');
+        });
+      } finally {
+        m110BatchInProgress = false;
+      }
+
+      if (m110DisconnectGeneration !== disconnectGenerationAtStart) {
+        handleM110AdaptiveTransportIssue('reconnexion détectée pendant le lot');
+      }
+
       setM110Progress(100, true);
       setTimeout(() => setM110Progress(0, false), 900);
 
       const secondsNum = result.elapsedMs / 1000;
       const seconds = secondsNum.toFixed(1);
       const perLabel = (secondsNum / copy.length).toFixed(2);
-      setM110Status(`✅ ${copy.length} étiquette(s) en ${seconds} s (${perLabel} s/étiquette) — ${profile.label}.`, 'ok');
+
+      setM110Status(
+        `✅ ${copy.length} étiquette(s) en ${seconds} s (${perLabel} s/étiquette) — ${profile.label}.`,
+        'ok'
+      );
+
       const splitText = result.microBatches > 1 ? ` · ${result.microBatches} sous-lots` : '';
-      const responseText = profile.forceResponse && m110WriteChar?.properties?.write ? ' · accusés GATT' : '';
-      setM110TransportInfo(`Transport : ${result.chunkSize} octets/paquet · ${result.writes} écritures${responseText}${splitText}.`);
+      const responseText =
+        profile.forceResponse && m110WriteChar?.properties?.write
+          ? ' · accusés GATT'
+          : '';
+
+      setM110TransportInfo(
+        `Transport : ${result.chunkSize} octets/paquet · ${result.writes} écritures${responseText}${splitText}.`
+      );
+
+      recordM110AdaptiveSuccess(copy.length);
+      updateM110AdaptiveStatus('Lot terminé sans erreur Bluetooth détectée.');
+
       if (navigator.vibrate) navigator.vibrate([80, 40, 80]);
     } catch (err) {
+      m110BatchInProgress = false;
       console.error('M110 print error:', err);
-      setM110Status('❌ Erreur d’impression : ' + (err.message || err), 'err');
+
+      handleM110AdaptiveTransportIssue(err.message || 'erreur d’impression Bluetooth');
+
+      const selectedSpeed = document.getElementById('m110SpeedProfile')?.value || '';
+      const saferLabel = M110_SPEED_PROFILES[selectedSpeed]?.label || selectedSpeed;
+      setM110Status(
+        `❌ Erreur d’impression : ${err.message || err}. 🧠 Prochain lot : ${saferLabel}.`,
+        'err'
+      );
     }
   });
+
   return m110PrintQueue;
 }
 
@@ -4936,6 +5359,8 @@ window.addEventListener("DOMContentLoaded", () => {
   restoreAutoPrintSingleUi();
   restoreM110SpeedUi();
   restoreM110LayoutUi();
+  restoreM110AdaptiveDefaultUi();
+  updateM110PrinterProfileInfo();
   updateM110Buttons();
   updateM110LastReconnectButton('checking');
   refreshKnownM110Devices();
@@ -4956,26 +5381,43 @@ window.addEventListener("DOMContentLoaded", () => {
   document.getElementById('customLabelHeight').addEventListener('input', updateLabelSizeUi);
   document.getElementById('m110SpeedProfile').addEventListener('change', () => {
     updateM110SpeedHint();
-    setM110TransportInfo('Transport : 128 octets fixe — aucune tentative 256.');
+    updateM110AdaptiveStatus('Réglage manuel mémorisé pour cette imprimante.');
+    saveCurrentM110PrinterProfile('débit manuel');
+    setM110TransportInfo('Transport : 128 octets maximum. Extra Extra Safe descend à 64 octets.');
   });
-  document.getElementById('m110LayoutProfile').addEventListener('change', updateM110LayoutHint);
+  document.getElementById('m110LayoutProfile').addEventListener('change', () => {
+    updateM110LayoutHint();
+    saveCurrentM110PrinterProfile('mise en page');
+  });
+  document.getElementById('m110Density').addEventListener('change', () => {
+    saveCurrentM110PrinterProfile('densité');
+  });
+  document.getElementById('m110AdaptiveSpeed').addEventListener('change', () => {
+    try {
+      localStorage.setItem(M110_ADAPTIVE_DEFAULT_KEY, isM110AdaptiveEnabled() ? '1' : '0');
+    } catch (_) {}
+    updateM110AdaptiveStatus();
+    saveCurrentM110PrinterProfile('adaptatif');
+  });
+
   document.getElementById('testM110').addEventListener('click', () => manualPrintM110([makeM110TestMatch()], 'TEST'));
   document.getElementById('testM110Burst').addEventListener('click', testM110Burst);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
       refreshKnownM110Devices();
       refreshLastM110AuthorizationState();
+      updateM110PrinterProfileInfo();
     }
   });
 });
 
 // =============================================================
-// V29 — MISE À JOUR / CACHE FIABLE
+// V30 — MISE À JOUR / CACHE FIABLE
 // - le navigateur vérifie toujours la dernière version de sw.js
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "29.0.0";
+const APP_VERSION = "30.0.0";
 try {
   const el = document.getElementById('appVersionText');
   if (el) el.textContent = `v${APP_VERSION}`;
@@ -5010,7 +5452,7 @@ async function installFreshServiceWorker() {
       location.reload();
     });
   } catch (err) {
-    console.warn("Service worker V29 non disponible :", err);
+    console.warn("Service worker V30 non disponible :", err);
   }
 }
 

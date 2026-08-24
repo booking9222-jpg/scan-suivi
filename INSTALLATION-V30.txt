@@ -1,0 +1,65 @@
+V30 — 2 + 3 + 4 : ADAPTATIF + PRÉ-TEST + PROFILS PAR IMPRIMANTE
+
+À mettre sur GitHub :
+- index.html
+- sw.js
+
+Aucun changement Google Sheets / Apps Script.
+
+1) DÉBIT ADAPTATIF AUTOMATIQUE
+Option activée par défaut :
+🧠 Débit adaptatif automatique
+
+Si une erreur Bluetooth ou une déconnexion est détectée pendant un lot :
+- Ultra sûr 128 → Turbo fiable 128
+- Turbo fiable 128 → Normal
+- Rapide 128 → Normal
+- Normal → Compatible
+- Compatible → Extra Extra Safe
+- Extra Extra Safe reste Extra Extra Safe
+
+Le nouveau réglage est mémorisé pour CETTE imprimante.
+La V30 ne remonte pas automatiquement vers un mode plus rapide : priorité à la stabilité.
+Tu peux toujours sélectionner manuellement un mode plus rapide si tu veux refaire un essai.
+
+2) PRÉ-TEST BLUETOOTH AVANT 6+ ÉTIQUETTES
+Avant tout lot de 6 étiquettes ou plus :
+- vérification de la connexion ;
+- vérification du canal GATT d'écriture ;
+- si la session a plus de 3 minutes, est déconnectée, ou s'il y a eu une erreur Bluetooth récente :
+  reconnexion GATT propre AVANT de commencer le lot ;
+- si le pré-test échoue, le lot n'est pas envoyé.
+
+Aucune étiquette de test n'est gaspillée : le pré-test contrôle la connexion, pas le papier.
+
+3) PROFIL MÉMORISÉ PAR IMPRIMANTE
+Pour chaque M110, la V30 mémorise :
+- taille d'étiquette (40×30 / 50×30 / personnalisée) ;
+- densité ;
+- débit Bluetooth ;
+- mise en page ;
+- mode adaptatif ON/OFF ;
+- statistiques de lots réussis / erreurs Bluetooth.
+
+À chaque reconnexion, les réglages propres à cette imprimante sont restaurés.
+
+IMPORTANT
+La V30 peut détecter les erreurs Web Bluetooth / GATT et les déconnexions.
+Elle ne peut pas détecter visuellement une impression papier corrompue si Android et la M110
+n'ont signalé aucune erreur logicielle.
+
+Toutes les fonctions V29 sont conservées, notamment :
+- les 2 solutions Bluetooth Reconnecter / Réautoriser ciblée ;
+- le bouton séparé pour afficher tous les appareils ;
+- description produit agrandie ;
+- marge sûre du code-barres 50×30 ;
+- Extra Extra Safe ;
+- GitHub automatique ;
+- Google Sheets / rangement / recherche.
+
+Après mise à jour :
+1. Ouvre ton site avec ?v=30
+2. Vérifie « Version actuelle : v30.0.0 »
+3. Connecte la M110.
+4. Vérifie la ligne « Profil imprimante ».
+5. Pour tester le pré-test, lance un lot de 6 ou 7 étiquettes.
