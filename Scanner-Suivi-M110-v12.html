@@ -396,7 +396,7 @@
 <!-- V21 : M110 Ultra sûr 128 octets, optimisé 1-13 -->
 
 <h1>📦 Vine : ouverture → M110 → rangement synchronisé</h1>
-<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v30</strong></div>
+<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v31</strong></div>
 
 <div class="team-workflow-card" id="teamWorkflowCard">
   <div class="team-workflow-title">⚙️ Organisation du travail</div>
@@ -551,6 +551,7 @@
   <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
   <div id="status">Aucun fichier chargé.</div>
   <div id="githubStatus1" class="github-file-status">☁️ GitHub : vérification automatique en attente…</div>
+  <div id="githubRepoInfo1" class="mini-note" style="margin-top:5px;color:#455a64;"></div>
 </div>
 
 <div class="card">
@@ -568,6 +569,7 @@
   <input type="file" id="fileInput2" accept=".xlsx,.xls,.csv">
   <div id="status2">Aucun 2e fichier chargé.</div>
   <div id="githubStatus2" class="github-file-status">☁️ GitHub : vérification automatique en attente…</div>
+  <div id="githubRepoInfo2" class="mini-note" style="margin-top:5px;color:#455a64;"></div>
 
   <details class="github-source-settings">
     <summary>⚙️ Sources GitHub automatiques</summary>
@@ -2697,9 +2699,45 @@ async function getSavedFile(key) {
 }
 
 
-const GITHUB_FILES_CONFIG_KEY = "vine-github-files-v23";
-const GITHUB_OWNER = "222-ipg";
-const GITHUB_REPO = "222-ipg.github.io";
+const GITHUB_FILES_CONFIG_KEY = "vine-github-files-v31";
+
+function detectGithubPagesRepository() {
+  const host = String(location.hostname || '').toLowerCase();
+
+  // Cas principal : https://UTILISATEUR.github.io/
+  // ex. booking9222-ipg.github.io -> owner booking9222-ipg
+  //                                  repo  booking9222-ipg.github.io
+  if (host.endsWith('.github.io')) {
+    const owner = host.slice(0, -'.github.io'.length);
+    if (owner) {
+      return {
+        owner,
+        repo: `${owner}.github.io`,
+        source: 'hostname'
+      };
+    }
+  }
+
+  // Secours si le HTML est ouvert hors de GitHub Pages.
+  return {
+    owner: '222-ipg',
+    repo: '222-ipg.github.io',
+    source: 'fallback'
+  };
+}
+
+const GITHUB_REPOSITORY = detectGithubPagesRepository();
+const GITHUB_OWNER = GITHUB_REPOSITORY.owner;
+const GITHUB_REPO = GITHUB_REPOSITORY.repo;
+
+
+function updateGithubRepoInfo() {
+  const text = `📦 Dépôt détecté : ${GITHUB_OWNER}/${GITHUB_REPO}`;
+  const a = document.getElementById('githubRepoInfo1');
+  const b = document.getElementById('githubRepoInfo2');
+  if (a) a.textContent = text;
+  if (b) b.textContent = text;
+}
 
 function formatFileDate(value) {
   if (!value) return "date inconnue";
@@ -2728,7 +2766,17 @@ function setGithubFileStatus(which, htmlText, state = "") {
 
 function readGithubFileConfig() {
   try {
-    return JSON.parse(localStorage.getItem(GITHUB_FILES_CONFIG_KEY) || "{}") || {};
+    let raw = localStorage.getItem(GITHUB_FILES_CONFIG_KEY);
+
+    // Migration des chemins saisis avec les anciennes versions.
+    if (!raw) {
+      raw = localStorage.getItem("vine-github-files-v23");
+      if (raw) {
+        try { localStorage.setItem(GITHUB_FILES_CONFIG_KEY, raw); } catch (_) {}
+      }
+    }
+
+    return JSON.parse(raw || "{}") || {};
   } catch (_) {
     return {};
   }
@@ -2785,13 +2833,56 @@ function scoreGithubPath(path, kind) {
 
 async function listGithubSpreadsheetFiles() {
   const all = [];
+  const apiBase = `https://api.github.com/repos/${encodeURIComponent(GITHUB_OWNER)}/${encodeURIComponent(GITHUB_REPO)}`;
 
+  async function fetchJson(url) {
+    const res = await fetch(url, {
+      cache: "no-store",
+      headers: { "Accept": "application/vnd.github+json" }
+    });
+
+    if (!res.ok) {
+      let detail = '';
+      try {
+        const body = await res.json();
+        detail = body?.message ? ` — ${body.message}` : '';
+      } catch (_) {}
+      throw new Error(`GitHub API ${res.status}${detail}`);
+    }
+
+    return res.json();
+  }
+
+  // V31 : récupère d'abord la branche par défaut, puis toute l'arborescence
+  // en un seul appel. Cela retrouve aussi les fichiers Excel rangés dans
+  // des sous-dossiers non prévus par les anciennes versions.
+  try {
+    const repoInfo = await fetchJson(apiBase);
+    const branch = repoInfo.default_branch || 'main';
+    const tree = await fetchJson(
+      `${apiBase}/git/trees/${encodeURIComponent(branch)}?recursive=1`
+    );
+
+    for (const item of Array.isArray(tree.tree) ? tree.tree : []) {
+      if (item.type === 'blob' && /\.(xlsx|xls|csv)$/i.test(item.path || '')) {
+        all.push({
+          path: item.path,
+          name: basenameFromPath(item.path),
+          size: Number(item.size || 0)
+        });
+      }
+    }
+
+    if (all.length) return all;
+  } catch (err) {
+    console.warn('GitHub tree API indisponible, essai via contents :', err);
+  }
+
+  // Fallback : ancienne méthode /contents.
   const fetchFolder = async (path = "") => {
     const suffix = path ? `/${path.replace(/^\/+|\/+$/g, "")}` : "";
-    const url = `https://api.github.com/repos/${encodeURIComponent(GITHUB_OWNER)}/${encodeURIComponent(GITHUB_REPO)}/contents${suffix}`;
-    const res = await fetch(url, { cache:"no-store", headers:{ "Accept":"application/vnd.github+json" } });
-    if (!res.ok) throw new Error(`GitHub API ${res.status}`);
-    const items = await res.json();
+    const url = `${apiBase}/contents${suffix}`;
+    const items = await fetchJson(url);
 
     for (const item of Array.isArray(items) ? items : []) {
       if (item.type === "file" && /\.(xlsx|xls|csv)$/i.test(item.name || "")) {
@@ -2803,11 +2894,14 @@ async function listGithubSpreadsheetFiles() {
   };
 
   const root = await fetchFolder("");
-  // Cherche aussi les dossiers courants sans parcourir tout le dépôt.
-  const folders = root.filter(x => x.type === "dir" && /^(data|files|fichiers|excel|exports?)$/i.test(x.name || ""));
-  for (const folder of folders.slice(0, 4)) {
+  const folders = root.filter(
+    x => x.type === "dir" && /^(data|files|fichiers|excel|exports?)$/i.test(x.name || "")
+  );
+
+  for (const folder of folders.slice(0, 6)) {
     try { await fetchFolder(folder.path); } catch (_) {}
   }
+
   return all;
 }
 
@@ -2983,9 +3077,24 @@ async function syncGithubFiles(forceDetect = false) {
     ]);
   } catch (err) {
     console.warn("Synchronisation GitHub des fichiers impossible :", err);
-    const msg = escapeHtml(err.message || err);
-    setGithubFileStatus("primary", `⚠️ GitHub non vérifié : ${msg}<br>💾 La copie locale reste utilisable.`, "err");
-    setGithubFileStatus("secondary", `⚠️ GitHub non vérifié : ${msg}<br>💾 La copie locale reste utilisable.`, "err");
+    const rawMsg = String(err.message || err);
+    const msg = escapeHtml(rawMsg);
+
+    let extra = '';
+    if (rawMsg.includes('404')) {
+      extra = `<br>📦 Dépôt essayé : <strong>${escapeHtml(GITHUB_OWNER)}/${escapeHtml(GITHUB_REPO)}</strong>`;
+    }
+
+    setGithubFileStatus(
+      "primary",
+      `⚠️ GitHub non vérifié : ${msg}${extra}<br>💾 La copie locale reste utilisable.`,
+      "err"
+    );
+    setGithubFileStatus(
+      "secondary",
+      `⚠️ GitHub non vérifié : ${msg}${extra}<br>💾 La copie locale reste utilisable.`,
+      "err"
+    );
   } finally {
     githubFilesSyncRunning = false;
   }
@@ -5350,6 +5459,7 @@ function initStorageMode() {
 
 // Restaure automatiquement les deux fichiers Excel mémorisés après une actualisation.
 window.addEventListener("DOMContentLoaded", () => {
+  updateGithubRepoInfo();
   fillGithubPathInputs();
   restoreSavedFiles().finally(() => {
     // Affiche immédiatement la copie locale, puis vérifie GitHub en arrière-plan.
@@ -5412,12 +5522,12 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 // =============================================================
-// V30 — MISE À JOUR / CACHE FIABLE
+// V31 — MISE À JOUR / CACHE FIABLE
 // - le navigateur vérifie toujours la dernière version de sw.js
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "30.0.0";
+const APP_VERSION = "31.0.0";
 try {
   const el = document.getElementById('appVersionText');
   if (el) el.textContent = `v${APP_VERSION}`;
@@ -5452,7 +5562,7 @@ async function installFreshServiceWorker() {
       location.reload();
     });
   } catch (err) {
-    console.warn("Service worker V30 non disponible :", err);
+    console.warn("Service worker V31 non disponible :", err);
   }
 }
 

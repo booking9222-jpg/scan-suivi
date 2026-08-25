@@ -1,0 +1,33 @@
+V31 — CORRECTION GITHUB API 404
+
+Problème trouvé :
+Les versions précédentes utilisaient en dur :
+222-ipg / 222-ipg.github.io
+
+Mais si le site est ouvert sur :
+booking9222-ipg.github.io
+
+le dépôt GitHub Pages attendu est automatiquement :
+booking9222-ipg / booking9222-ipg.github.io
+
+V31 :
+- détecte automatiquement l'utilisateur GitHub depuis le domaine actuel ;
+- détecte automatiquement le dépôt GitHub Pages correspondant ;
+- affiche sous les fichiers le dépôt réellement utilisé ;
+- cherche les fichiers Excel/CSV dans TOUTE l'arborescence du dépôt via l'API tree ;
+- garde une méthode de secours via /contents ;
+- conserve les chemins configurés dans les anciennes versions ;
+- affiche clairement le dépôt essayé en cas de nouvelle erreur 404.
+
+À mettre sur GitHub :
+- index.html
+- sw.js
+
+Aucun changement Apps Script / Google Sheets.
+
+Après mise à jour :
+1. Ouvre le site avec ?v=31
+2. Vérifie « Version actuelle : v31.0.0 »
+3. Sous Order History et Correspondance, regarde :
+   « Dépôt détecté : .../... »
+4. Si le dépôt est correct, la détection automatique doit repartir.
