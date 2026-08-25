@@ -396,7 +396,7 @@
 <!-- V21 : M110 Ultra sûr 128 octets, optimisé 1-13 -->
 
 <h1>📦 Vine : ouverture → M110 → rangement synchronisé</h1>
-<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v31</strong></div>
+<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v32</strong></div>
 
 <div class="team-workflow-card" id="teamWorkflowCard">
   <div class="team-workflow-title">⚙️ Organisation du travail</div>
@@ -2699,44 +2699,123 @@ async function getSavedFile(key) {
 }
 
 
-const GITHUB_FILES_CONFIG_KEY = "vine-github-files-v31";
+const GITHUB_FILES_CONFIG_KEY = "vine-github-files-v32";
 
-function detectGithubPagesRepository() {
+function detectGithubPagesContext() {
   const host = String(location.hostname || '').toLowerCase();
+  const rawPath = String(location.pathname || '/');
+  const pathParts = rawPath.split('/').filter(Boolean);
 
-  // Cas principal : https://UTILISATEUR.github.io/
-  // ex. booking9222-ipg.github.io -> owner booking9222-ipg
-  //                                  repo  booking9222-ipg.github.io
+  // Retire index.html ou un nom de fichier éventuel.
+  const cleanParts = pathParts.filter((part, index) => {
+    if (index === pathParts.length - 1 && /\.[a-z0-9]{2,6}$/i.test(part)) return false;
+    return true;
+  });
+
+  let owner = '';
   if (host.endsWith('.github.io')) {
-    const owner = host.slice(0, -'.github.io'.length);
-    if (owner) {
-      return {
-        owner,
-        repo: `${owner}.github.io`,
-        source: 'hostname'
-      };
-    }
+    owner = host.slice(0, -'.github.io'.length);
   }
 
-  // Secours si le HTML est ouvert hors de GitHub Pages.
+  // Si le site est servi sous /scan-suivi/, on le récupère directement.
+  // Si Chrome masque le chemin dans la barre ou si l'URL est à la racine,
+  // on garde scan-suivi comme dossier préféré car c'est la structure utilisée ici.
+  const detectedFolder = cleanParts[0] || '';
+  const preferredFolder =
+    detectedFolder && detectedFolder.toLowerCase() !== 'index.html'
+      ? detectedFolder
+      : 'scan-suivi';
+
   return {
-    owner: '222-ipg',
-    repo: '222-ipg.github.io',
-    source: 'fallback'
+    host,
+    owner: owner || '222-ipg',
+    userSiteRepo: owner ? `${owner}.github.io` : '222-ipg.github.io',
+    detectedFolder,
+    preferredFolder
   };
 }
 
-const GITHUB_REPOSITORY = detectGithubPagesRepository();
-const GITHUB_OWNER = GITHUB_REPOSITORY.owner;
-const GITHUB_REPO = GITHUB_REPOSITORY.repo;
+const GITHUB_CONTEXT = detectGithubPagesContext();
 
+// Source réellement retenue après test API.
+// Deux structures GitHub Pages sont prises en charge :
+// 1) dépôt utilisateur owner.github.io + dossier scan-suivi/
+// 2) dépôt projet scan-suivi servi sur owner.github.io/scan-suivi/
+let GITHUB_RESOLVED_SOURCE = null;
 
-function updateGithubRepoInfo() {
-  const text = `📦 Dépôt détecté : ${GITHUB_OWNER}/${GITHUB_REPO}`;
+function getGithubSourceCandidates() {
+  const owner = GITHUB_CONTEXT.owner;
+  const folder = GITHUB_CONTEXT.preferredFolder || 'scan-suivi';
+
+  return [
+    {
+      owner,
+      repo: GITHUB_CONTEXT.userSiteRepo,
+      apiBasePath: folder,
+      pagesPrefix: '',
+      label: `${owner}/${GITHUB_CONTEXT.userSiteRepo} · dossier ${folder}/`
+    },
+    {
+      owner,
+      repo: folder,
+      apiBasePath: '',
+      pagesPrefix: folder,
+      label: `${owner}/${folder} · projet GitHub Pages /${folder}/`
+    },
+    // Dernier secours : dépôt utilisateur à la racine.
+    {
+      owner,
+      repo: GITHUB_CONTEXT.userSiteRepo,
+      apiBasePath: '',
+      pagesPrefix: '',
+      label: `${owner}/${GITHUB_CONTEXT.userSiteRepo} · racine`
+    }
+  ];
+}
+
+function updateGithubRepoInfo(source = GITHUB_RESOLVED_SOURCE) {
+  const folderText = GITHUB_CONTEXT.detectedFolder
+    ? ` · URL : /${GITHUB_CONTEXT.detectedFolder}/`
+    : ` · dossier attendu : /${GITHUB_CONTEXT.preferredFolder}/`;
+
+  const text = source
+    ? `📦 Source GitHub : ${source.label}${folderText}`
+    : `📦 Recherche GitHub : ${GITHUB_CONTEXT.owner} · ${folderText}`;
+
   const a = document.getElementById('githubRepoInfo1');
   const b = document.getElementById('githubRepoInfo2');
   if (a) a.textContent = text;
   if (b) b.textContent = text;
+}
+
+function pathStartsWithFolder(path, folder) {
+  const clean = String(path || '').replace(/^\/+/, '');
+  const f = String(folder || '').replace(/^\/+|\/+$/g, '');
+  if (!f) return true;
+  return clean === f || clean.startsWith(f + '/');
+}
+
+function normalizePathForResolvedSource(path, source = GITHUB_RESOLVED_SOURCE) {
+  let clean = String(path || '').replace(/^\/+/, '');
+  if (!source || !clean) return clean;
+
+  const base = String(source.apiBasePath || '').replace(/^\/+|\/+$/g, '');
+
+  // Dépôt owner.github.io + dossier scan-suivi : le chemin API complet
+  // doit contenir scan-suivi/.
+  if (base && !pathStartsWithFolder(clean, base)) {
+    clean = `${base}/${clean}`;
+  }
+
+  // Dépôt projet scan-suivi : l'API renvoie les chemins sans scan-suivi/.
+  if (!base && source.repo === GITHUB_CONTEXT.preferredFolder) {
+    const folder = GITHUB_CONTEXT.preferredFolder;
+    if (pathStartsWithFolder(clean, folder)) {
+      clean = clean.slice(folder.length).replace(/^\/+/, '');
+    }
+  }
+
+  return clean;
 }
 
 function formatFileDate(value) {
@@ -2770,9 +2849,12 @@ function readGithubFileConfig() {
 
     // Migration des chemins saisis avec les anciennes versions.
     if (!raw) {
-      raw = localStorage.getItem("vine-github-files-v23");
-      if (raw) {
-        try { localStorage.setItem(GITHUB_FILES_CONFIG_KEY, raw); } catch (_) {}
+      for (const oldKey of ["vine-github-files-v31", "vine-github-files-v23"]) {
+        raw = localStorage.getItem(oldKey);
+        if (raw) {
+          try { localStorage.setItem(GITHUB_FILES_CONFIG_KEY, raw); } catch (_) {}
+          break;
+        }
       }
     }
 
@@ -2832,8 +2914,7 @@ function scoreGithubPath(path, kind) {
 }
 
 async function listGithubSpreadsheetFiles() {
-  const all = [];
-  const apiBase = `https://api.github.com/repos/${encodeURIComponent(GITHUB_OWNER)}/${encodeURIComponent(GITHUB_REPO)}`;
+  const attempts = [];
 
   async function fetchJson(url) {
     const res = await fetch(url, {
@@ -2853,89 +2934,146 @@ async function listGithubSpreadsheetFiles() {
     return res.json();
   }
 
-  // V31 : récupère d'abord la branche par défaut, puis toute l'arborescence
-  // en un seul appel. Cela retrouve aussi les fichiers Excel rangés dans
-  // des sous-dossiers non prévus par les anciennes versions.
-  try {
-    const repoInfo = await fetchJson(apiBase);
-    const branch = repoInfo.default_branch || 'main';
-    const tree = await fetchJson(
-      `${apiBase}/git/trees/${encodeURIComponent(branch)}?recursive=1`
-    );
+  for (const source of getGithubSourceCandidates()) {
+    const apiBase =
+      `https://api.github.com/repos/${encodeURIComponent(source.owner)}/${encodeURIComponent(source.repo)}`;
 
-    for (const item of Array.isArray(tree.tree) ? tree.tree : []) {
-      if (item.type === 'blob' && /\.(xlsx|xls|csv)$/i.test(item.path || '')) {
-        all.push({
+    try {
+      const repoInfo = await fetchJson(apiBase);
+      const branch = repoInfo.default_branch || 'main';
+      const tree = await fetchJson(
+        `${apiBase}/git/trees/${encodeURIComponent(branch)}?recursive=1`
+      );
+
+      const files = [];
+      const base = String(source.apiBasePath || '').replace(/^\/+|\/+$/g, '');
+
+      for (const item of Array.isArray(tree.tree) ? tree.tree : []) {
+        if (item.type !== 'blob' || !/\.(xlsx|xls|csv)$/i.test(item.path || '')) continue;
+
+        if (base && !pathStartsWithFolder(item.path, base)) continue;
+
+        files.push({
           path: item.path,
           name: basenameFromPath(item.path),
           size: Number(item.size || 0)
         });
       }
-    }
 
-    if (all.length) return all;
-  } catch (err) {
-    console.warn('GitHub tree API indisponible, essai via contents :', err);
-  }
-
-  // Fallback : ancienne méthode /contents.
-  const fetchFolder = async (path = "") => {
-    const suffix = path ? `/${path.replace(/^\/+|\/+$/g, "")}` : "";
-    const url = `${apiBase}/contents${suffix}`;
-    const items = await fetchJson(url);
-
-    for (const item of Array.isArray(items) ? items : []) {
-      if (item.type === "file" && /\.(xlsx|xls|csv)$/i.test(item.name || "")) {
-        all.push({ path:item.path, name:item.name, size:item.size || 0 });
+      if (files.length) {
+        GITHUB_RESOLVED_SOURCE = source;
+        updateGithubRepoInfo(source);
+        return files;
       }
+
+      attempts.push(`${source.label} : aucun Excel/CSV`);
+    } catch (err) {
+      attempts.push(`${source.label} : ${err.message || err}`);
     }
-
-    return Array.isArray(items) ? items : [];
-  };
-
-  const root = await fetchFolder("");
-  const folders = root.filter(
-    x => x.type === "dir" && /^(data|files|fichiers|excel|exports?)$/i.test(x.name || "")
-  );
-
-  for (const folder of folders.slice(0, 6)) {
-    try { await fetchFolder(folder.path); } catch (_) {}
   }
 
-  return all;
+  throw new Error(
+    `Aucune source GitHub valide trouvée. ` +
+    attempts.join(' | ')
+  );
 }
 
 async function autoDetectGithubFilePaths(force = false) {
   let config = readGithubFileConfig();
-  if (!force && config.primaryPath && config.secondaryPath) {
-    fillGithubPathInputs(config);
-    return config;
-  }
 
   setGithubFileStatus("primary", "☁️ GitHub : recherche du fichier Order History…", "wait");
   setGithubFileStatus("secondary", "☁️ GitHub : recherche du fichier de correspondance…", "wait");
 
+  // V32 : on résout toujours d'abord la vraie structure GitHub
+  // (dossier scan-suivi ou dépôt projet scan-suivi).
   const files = await listGithubSpreadsheetFiles();
-  if (!files.length) throw new Error("Aucun fichier .xlsx/.xls/.csv trouvé dans le dépôt GitHub.");
+  if (!files.length) {
+    throw new Error("Aucun fichier .xlsx/.xls/.csv trouvé dans scan-suivi.");
+  }
 
-  const primary = files.slice().sort((a,b) => scoreGithubPath(b.path,"primary") - scoreGithubPath(a.path,"primary"))[0];
-  const secondary = files.slice().sort((a,b) => scoreGithubPath(b.path,"secondary") - scoreGithubPath(a.path,"secondary"))[0];
+  if (!force && config.primaryPath && config.secondaryPath) {
+    const normalizedPrimary = normalizePathForResolvedSource(config.primaryPath);
+    const normalizedSecondary = normalizePathForResolvedSource(config.secondaryPath);
+
+    const availablePaths = new Set(files.map(f => String(f.path || '')));
+
+    if (
+      availablePaths.has(normalizedPrimary) &&
+      availablePaths.has(normalizedSecondary)
+    ) {
+      config = {
+        ...config,
+        primaryPath: normalizedPrimary,
+        secondaryPath: normalizedSecondary,
+        sourceRepo: GITHUB_RESOLVED_SOURCE?.repo || '',
+        sourceBasePath: GITHUB_RESOLVED_SOURCE?.apiBasePath || ''
+      };
+      saveGithubFileConfig(config);
+      fillGithubPathInputs(config);
+      return config;
+    }
+  }
+
+  const primary = files.slice().sort(
+    (a,b) => scoreGithubPath(b.path,"primary") - scoreGithubPath(a.path,"primary")
+  )[0];
+
+  const secondary = files.slice().sort(
+    (a,b) => scoreGithubPath(b.path,"secondary") - scoreGithubPath(a.path,"secondary")
+  )[0];
 
   if (!primary || scoreGithubPath(primary.path,"primary") <= 0) {
-    throw new Error("Impossible d'identifier automatiquement Order History.");
-  }
-  if (!secondary || scoreGithubPath(secondary.path,"secondary") <= 0 || secondary.path === primary.path) {
-    throw new Error("Impossible d'identifier automatiquement le fichier de correspondance.");
+    throw new Error("Impossible d'identifier automatiquement Order History dans scan-suivi.");
   }
 
-  config = { primaryPath:primary.path, secondaryPath:secondary.path, detectedAt:Date.now() };
+  if (
+    !secondary ||
+    scoreGithubPath(secondary.path,"secondary") <= 0 ||
+    secondary.path === primary.path
+  ) {
+    throw new Error("Impossible d'identifier automatiquement le fichier de correspondance dans scan-suivi.");
+  }
+
+  config = {
+    primaryPath: primary.path,
+    secondaryPath: secondary.path,
+    detectedAt: Date.now(),
+    sourceRepo: GITHUB_RESOLVED_SOURCE?.repo || '',
+    sourceBasePath: GITHUB_RESOLVED_SOURCE?.apiBasePath || ''
+  };
+
   saveGithubFileConfig(config);
   fillGithubPathInputs(config);
   return config;
 }
 
 function githubPagesFileUrl(path, cacheBust = true) {
-  const clean = String(path || "").replace(/^\/+/, "");
+  let clean = String(path || "").replace(/^\/+/, "");
+  const source = GITHUB_RESOLVED_SOURCE;
+
+  if (source) {
+    // Dépôt projet scan-suivi : le chemin API est "fichier.xlsx"
+    // mais l'URL Pages est /scan-suivi/fichier.xlsx.
+    const prefix = String(source.pagesPrefix || '').replace(/^\/+|\/+$/g, '');
+    if (prefix && !pathStartsWithFolder(clean, prefix)) {
+      clean = `${prefix}/${clean}`;
+    }
+
+    // Dépôt utilisateur + dossier scan-suivi : le chemin renvoyé par l'API
+    // contient déjà scan-suivi/. Si un ancien chemin local ne l'a pas,
+    // on le rajoute.
+    const base = String(source.apiBasePath || '').replace(/^\/+|\/+$/g, '');
+    if (base && !pathStartsWithFolder(clean, base)) {
+      clean = `${base}/${clean}`;
+    }
+  } else {
+    // Secours : structure attendue par l'utilisateur.
+    const folder = GITHUB_CONTEXT.preferredFolder || 'scan-suivi';
+    if (folder && !pathStartsWithFolder(clean, folder)) {
+      clean = `${folder}/${clean}`;
+    }
+  }
+
   const url = new URL("/" + clean, location.origin);
   if (cacheBust) url.searchParams.set("vfile", String(Date.now()));
   return url.toString();
@@ -3081,8 +3219,9 @@ async function syncGithubFiles(forceDetect = false) {
     const msg = escapeHtml(rawMsg);
 
     let extra = '';
-    if (rawMsg.includes('404')) {
-      extra = `<br>📦 Dépôt essayé : <strong>${escapeHtml(GITHUB_OWNER)}/${escapeHtml(GITHUB_REPO)}</strong>`;
+    if (rawMsg.includes('404') || rawMsg.includes('Aucune source GitHub valide')) {
+      const candidates = getGithubSourceCandidates().map(s => s.label).join(' | ');
+      extra = `<br>📦 Sources essayées : <strong>${escapeHtml(candidates)}</strong>`;
     }
 
     setGithubFileStatus(
@@ -5522,12 +5661,12 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 // =============================================================
-// V31 — MISE À JOUR / CACHE FIABLE
+// V32 — MISE À JOUR / CACHE FIABLE
 // - le navigateur vérifie toujours la dernière version de sw.js
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "31.0.0";
+const APP_VERSION = "32.0.0";
 try {
   const el = document.getElementById('appVersionText');
   if (el) el.textContent = `v${APP_VERSION}`;
@@ -5562,7 +5701,7 @@ async function installFreshServiceWorker() {
       location.reload();
     });
   } catch (err) {
-    console.warn("Service worker V31 non disponible :", err);
+    console.warn("Service worker V32 non disponible :", err);
   }
 }
 

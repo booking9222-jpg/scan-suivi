@@ -1,0 +1,40 @@
+V32 — CORRECTION DU DOSSIER / PROJET scan-suivi
+
+Oui : la V31 ne gérait pas correctement le niveau scan-suivi.
+
+V32 teste automatiquement les 2 structures GitHub Pages possibles :
+
+A) Dépôt utilisateur :
+   222-ipg/222-ipg.github.io
+   └── scan-suivi/
+       ├── index.html
+       ├── Order_History....xlsx
+       └── fichier_correspondance....xlsx
+
+B) Dépôt projet :
+   222-ipg/scan-suivi
+
+   servi sur :
+   https://222-ipg.github.io/scan-suivi/
+
+La V32 :
+- détecte le propriétaire depuis le domaine ;
+- prend scan-suivi comme dossier/projet prioritaire ;
+- teste d'abord owner.github.io/scan-suivi/ ;
+- teste ensuite le dépôt projet owner/scan-suivi ;
+- cherche les Excel/CSV uniquement dans la bonne source ;
+- corrige automatiquement les anciens chemins qui oubliaient scan-suivi/ ;
+- construit également les URL de téléchargement avec /scan-suivi/ ;
+- conserve la copie locale hors connexion.
+
+À mettre sur GitHub :
+- index.html
+- sw.js
+
+Aucun changement Apps Script / Google Sheets.
+
+Après mise à jour :
+1. Ouvre le site avec ?v=32
+2. Vérifie « Version actuelle : v32.0.0 »
+3. Sous Order History, regarde la ligne « Source GitHub ».
+4. Elle devrait mentionner scan-suivi/.
