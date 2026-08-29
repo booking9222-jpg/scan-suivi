@@ -1,0 +1,24 @@
+SCANNER V32 — CORRECTION FICHIER CDISCOUNT RESTÉ À 1 LIGNE
+
+Problème corrigé :
+- GitHub contenait bien le nouveau ASIN_Code_Barre_Cdiscount.xlsx,
+  mais GitHub Pages / la copie locale pouvait encore servir l'ancien XLSX à 1 ligne.
+
+V32 :
+- le fichier de correspondance est téléchargé directement par l'API GitHub ;
+- le XLSX est relu AVANT d'écraser la copie locale ;
+- le nombre de lignes ASIN + code-barres valides est affiché ;
+- si la copie locale est suspecte (<=5 lignes), téléchargement direct forcé ;
+- le bouton « Vérifier maintenant » force toujours un re-téléchargement réel ;
+- protection : un fichier distant à 1 ligne ne remplace pas une copie locale >=100 lignes.
+
+INSTALLATION :
+1. Sur le dépôt GitHub Pages, remplacer le fichier HTML utilisé par le site
+   avec index.html de ce dossier (ou copier son contenu dans ton index actuel).
+2. Commit / attendre la publication GitHub Pages.
+3. Sur le téléphone, recharger la page.
+4. Ouvrir « Sources GitHub automatiques ».
+5. Appuyer sur « Vérifier maintenant ».
+6. Le statut doit afficher le nombre réel de correspondances (pour ton fichier actuel : 11199).
+
+Aucun changement Bluetooth / M110 / rangement / impression.
