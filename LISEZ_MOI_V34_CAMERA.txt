@@ -1,0 +1,17 @@
+V34 — CAMERA MOBILE OPTIMISEE
+===============================
+
+NOUVEAUTES
+- Quand la caméra démarre, elle passe en affichage plein écran mobile.
+- La vidéo occupe tout l’écran, les boutons Flash/Fermer flottent en bas.
+- La zone de visée s’adapte automatiquement à la taille de l’écran.
+- FPS caméra : 14 pour accélérer la détection des codes 1D.
+- Si le code de suivi est TROUVE dans Order History :
+    -> la caméra se ferme automatiquement ;
+    -> retour à la vue normale ;
+    -> le résultat/les étiquettes restent affichés.
+- Si le code N’EST PAS trouvé :
+    -> la caméra reste ouverte pour rescanner immédiatement.
+
+INSTALLATION
+Remplacer index.html dans le dépôt scan-suivi par le index.html de ce patch.
