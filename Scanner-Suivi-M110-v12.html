@@ -2230,7 +2230,7 @@ function updateLabelSizeUi() {
   const formatHint = document.getElementById('m110FormatHint');
   if (formatHint) {
     if (size.formatMode === 'compact20') {
-      formatHint.textContent = '⚡ 40×20 Compact optimisé : contenu agrandi et réparti sur toute la hauteur, code-barres plus large/haut, ASIN/code plus lisibles, description jusqu’à 2 lignes.';
+      formatHint.textContent = '⚡ 40×20 Compact V37 : code-barres plus bas et moins haut, zone blanche obligatoire avant l’ASIN, texte repositionné sans chevauchement, description centrée dans l’espace restant.';
       formatHint.style.color = '#00695c';
     } else if (size.formatMode === 'long70') {
       formatHint.textContent = '↪️ 40×70 Paysage : le contenu est dessiné en 70×40 puis tourné de 90° pour exploiter les 70 mm dans le sens de sortie. Code-barres beaucoup plus large et texte plus lisible.';
@@ -2401,17 +2401,18 @@ function generateM110Compact20Canvas(match, trackingValue, size) {
   ctx.imageSmoothingEnabled = false;
   ctx.textBaseline = 'alphabetic';
 
-  const side = Math.max(mmToDots(1.25), 8);
+  // V37 — grille verticale stricte pour éviter tout chevauchement.
+  // 20 mm ≈ 160 dots à 203 dpi.
+  const side = Math.max(mmToDots(1.4), 9);
 
-  // V36 : le 40×20 utilise maintenant pratiquement toute la hauteur.
-  const trackingFont = 9;
-  const asinFont = 15;
-  const codeFont = 16;
-  const titleFont = 13;
-  const titleLineStep = 14;
+  const trackingFont = 8;
+  const asinFont = 14;
+  const codeFont = 15;
+  const titleFont = 11;
+  const titleLineStep = 12;
 
-  let y = trackingFont + 1;
-
+  // 1) Suivi : petite ligne tout en haut.
+  let y = 9;
   ctx.textAlign = 'left';
   ctx.font = `${trackingFont}px Arial`;
   const trackingText = `Colis - N° de suivi: ${trackingValue || ''}`;
@@ -2421,17 +2422,18 @@ function generateM110Compact20Canvas(match, trackingValue, size) {
     y
   );
 
+  // 2) Code-barres : volontairement moins haut qu'en V36.
+  // On privilégie la largeur, mais on garde une vraie séparation verticale.
   const barcodeValue = String(match.pdfBarcodeValue || match.asin || '');
-  const barcodeTop = y + 2;
-  const barcodeHeight = mmToDots(7.8);
-  const barcodeMaxWidth = W - Math.max(side, mmToDots(1.4)) * 2;
+  const barcodeTop = 12;
+  const barcodeHeight = mmToDots(5.4);   // ~43 dots
+  const barcodeMaxWidth = W - Math.max(side, mmToDots(1.5)) * 2;
 
-  // Modules intermédiaires pour utiliser beaucoup mieux les 40 mm disponibles.
   const bc = makeBestM110BarcodeCanvas(
     barcodeValue,
     barcodeMaxWidth,
     barcodeHeight,
-    [2.0, 1.8, 1.6, 1.4, 1.25, 1.1, 1.0]
+    [2.0, 1.8, 1.6, 1.45, 1.3, 1.2, 1.1, 1.0]
   );
 
   let dw = bc.width;
@@ -2439,47 +2441,64 @@ function generateM110Compact20Canvas(match, trackingValue, size) {
 
   if (dw > barcodeMaxWidth) {
     const scale = barcodeMaxWidth / dw;
-    dw = Math.floor(dw * scale);
-    dh = Math.floor(dh * scale);
+    dw = Math.max(1, Math.floor(dw * scale));
+    dh = Math.max(1, Math.floor(dh * scale));
+  }
+
+  // Sécurité absolue : même si JsBarcode renvoie un canvas plus haut,
+  // le code-barres ne dépassera jamais ~5,6 mm.
+  const maxDh = mmToDots(5.6);
+  if (dh > maxDh) {
+    const scale = maxDh / dh;
+    dw = Math.max(1, Math.floor(dw * scale));
+    dh = Math.max(1, Math.floor(dh * scale));
   }
 
   const barcodeX = Math.round((W - dw) / 2);
   ctx.drawImage(bc, barcodeX, barcodeTop, dw, dh);
 
-  // ASIN
-  y = barcodeTop + dh + 3;
+  // 3) ASIN : zone blanche minimale de 7 dots après le code-barres.
+  const barcodeBottom = barcodeTop + dh;
+  const asinY = Math.max(barcodeBottom + 7 + asinFont, 72);
+
   ctx.textAlign = 'center';
   ctx.font = `bold ${asinFont}px Arial`;
   ctx.fillText(
     truncateTextToWidth(ctx, String(match.asin || ''), W - side * 2),
     W / 2,
-    y
+    asinY
   );
 
-  // Code imprimé
-  y += codeFont;
+  // 4) Code imprimé juste sous l'ASIN.
+  const codeY = asinY + codeFont + 1;
   ctx.font = `bold ${codeFont}px Arial`;
   ctx.fillText(
     truncateTextToWidth(ctx, barcodeValue, W - side * 2),
     W / 2,
-    y
+    codeY
   );
 
-  // Description : jusqu'à 2 lignes, placée plus bas pour supprimer le grand vide.
+  // 5) Description : jusqu'à 2 lignes, centrée verticalement
+  // dans tout l'espace restant au lieu d'être tassée en haut ou trop basse.
   ctx.font = `${titleFont}px Arial`;
-  const maxLines = 2;
   const lines = wrapM110Text(
     ctx,
     match.productName || '',
     W - side * 2,
-    maxLines
+    2
   );
 
-  const blockHeight = Math.max(titleFont, (lines.length - 1) * titleLineStep + titleFont);
-  let titleY = Math.max(
-    y + titleFont + 2,
-    H - blockHeight - 7
-  );
+  const titleBlockHeight =
+    lines.length <= 1 ? titleFont : titleFont + titleLineStep;
+
+  const availableTop = codeY + 5;
+  const availableBottom = H - 5;
+  const availableHeight = Math.max(0, availableBottom - availableTop);
+
+  let titleY =
+    availableTop +
+    Math.max(0, Math.floor((availableHeight - titleBlockHeight) / 2)) +
+    titleFont;
 
   for (const line of lines) {
     if (titleY > H - 2) break;
@@ -6129,12 +6148,12 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 // =============================================================
-// V36 — MISE À JOUR / CACHE FIABLE
+// V37 — MISE À JOUR / CACHE FIABLE
 // - le navigateur vérifie toujours la dernière version de sw.js
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "36.0.0";
+const APP_VERSION = "37.0.0";
 try {
   const el = document.getElementById('appVersionText');
   if (el) el.textContent = `v${APP_VERSION}`;
