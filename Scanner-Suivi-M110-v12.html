@@ -5,7 +5,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="34.0.0">
+<meta name="app-version" content="12.0.0">
 <title>Scanner Suivi → ASIN → M110 — V13 Catalogue + Photo + Sortie</title>
 <script src="./Dernier Fonctionnel_files/xlsx.full.min.js.télécharger"></script>
 <script src="./Dernier Fonctionnel_files/html5-qrcode.min.js.télécharger"></script>
@@ -40,60 +40,7 @@
   }
   .btn.stop { background:#c62828; }
   #cameraWrap { display:none; margin-top:12px; }
-  #reader { width:100%; max-width:500px; border-radius:8px; overflow:hidden; background:#000; }
-
-  /* ===== V34 CAMERA MOBILE / PLEIN ECRAN ===== */
-  body.camera-live { overflow:hidden !important; overscroll-behavior:none; }
-  #cameraZone .camera-controls { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-  #cameraZone .camera-live-title { display:none; }
-  #cameraZone.camera-live-overlay {
-    display:flex !important;
-    position:fixed; inset:0; z-index:10000;
-    width:100vw; height:100dvh; height:100svh;
-    background:#000; padding:0; margin:0;
-    flex-direction:column; overflow:hidden;
-  }
-  #cameraZone.camera-live-overlay .camera-live-title {
-    display:block; position:absolute; top:calc(10px + env(safe-area-inset-top));
-    left:12px; right:12px; z-index:10004;
-    color:#fff; background:rgba(0,0,0,.62); backdrop-filter:blur(6px);
-    border-radius:999px; padding:10px 14px; text-align:center;
-    font-size:15px; font-weight:900; pointer-events:none;
-  }
-  #cameraZone.camera-live-overlay #cameraWrap {
-    display:flex !important; flex:1; width:100%; height:100%; min-height:0;
-    margin:0; align-items:stretch; justify-content:stretch; background:#000;
-  }
-  #cameraZone.camera-live-overlay #reader {
-    width:100% !important; max-width:none !important; height:100% !important;
-    min-height:100% !important; border-radius:0 !important; background:#000;
-  }
-  #cameraZone.camera-live-overlay #reader video {
-    width:100% !important; height:100% !important; max-height:none !important;
-    object-fit:cover !important;
-  }
-  #cameraZone.camera-live-overlay #reader > div { max-width:none !important; }
-  #cameraZone.camera-live-overlay .camera-controls {
-    position:absolute; left:12px; right:12px;
-    bottom:calc(14px + env(safe-area-inset-bottom)); z-index:10005;
-    display:grid; grid-template-columns:1fr 1fr; gap:10px;
-    padding:10px; border-radius:16px;
-    background:rgba(0,0,0,.68); backdrop-filter:blur(8px);
-  }
-  #cameraZone.camera-live-overlay .camera-controls .btn {
-    width:100%; margin:0; min-height:48px; font-size:15px; font-weight:900;
-  }
-  #cameraZone.camera-live-overlay #startCam { display:none !important; }
-  #cameraZone.camera-live-overlay #camStatus {
-    position:absolute; left:14px; right:14px;
-    bottom:calc(84px + env(safe-area-inset-bottom)); z-index:10004;
-    margin:0 !important; padding:9px 12px; border-radius:12px;
-    background:rgba(0,0,0,.68); color:#fff !important;
-    font-size:13px !important; line-height:1.35; text-align:center;
-  }
-  @media (max-width:520px) {
-    #cameraZone:not(.camera-live-overlay) .camera-controls .btn { flex:1; min-width:135px; }
-  }
+  #reader { width:100%; max-width:500px; border-radius:8px; overflow:hidden; }
   .tab-toggle { display:flex; gap:8px; margin-bottom:14px; }
   .tab-btn { flex:1; padding:10px; border:1px solid #ff9900; background:#fff; color:#ff9900; border-radius:6px; cursor:pointer; font-weight:bold; }
   .tab-btn.active { background:#ff9900; color:#fff; }
@@ -449,7 +396,7 @@
 <!-- V21 : M110 Ultra sûr 128 octets, optimisé 1-13 -->
 
 <h1>📦 Vine : ouverture → M110 → rangement synchronisé</h1>
-<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v31</strong></div>
+<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v33</strong></div>
 
 <div class="team-workflow-card" id="teamWorkflowCard">
   <div class="team-workflow-title">⚙️ Organisation du travail</div>
@@ -515,8 +462,10 @@
   <div style="margin-top:14px;"><strong>📐 Taille de l'étiquette</strong></div>
   <div class="size-box">
     <select id="labelSizePreset">
-      <option value="40x30" selected>40 × 30 mm</option>
-      <option value="50x30">50 × 30 mm</option>
+      <option value="40x20">40 × 20 mm — Compact</option>
+      <option value="40x30" selected>40 × 30 mm — Standard</option>
+      <option value="50x30">50 × 30 mm — Large</option>
+      <option value="40x70">40 × 70 mm — Long</option>
       <option value="custom">Autre taille…</option>
     </select>
     <div id="customSizeWrap" style="display:none; align-items:center; gap:6px; flex-wrap:wrap;">
@@ -525,7 +474,13 @@
     </div>
     <span id="activeLabelSize" class="label-size-badge">40 × 30 mm</span>
   </div>
-  <div class="mini-note">La M110 accepte des étiquettes jusqu'à 50 mm de large. Sa tête imprime environ 48 mm au maximum : sur une étiquette de 50 mm, le contenu est centré avec une petite marge latérale.</div>
+  <div class="mini-note">
+    La M110 accepte jusqu'à 50 mm de largeur. <strong>40×70 signifie bien 40 mm de large × 70 mm de haut</strong> :
+    ce format est compatible car la largeur reste à 40 mm.
+  </div>
+  <div id="m110FormatHint" class="mini-note" style="margin-top:5px;font-weight:800;color:#37474f;">
+    40×30 Standard : mise en page actuelle.
+  </div>
 
   <div class="printer-row">
     <label style="font-size:13px;">Densité :
@@ -641,7 +596,7 @@
     </div>
     <div class="mini-note" style="margin-top:7px;">
       GitHub est la source prioritaire. Si Internet est indisponible, la dernière copie enregistrée sur ce téléphone reste utilisée.
-      V32 : le fichier de correspondance est re-téléchargé directement via l’API GitHub lors d’une vérification forcée, puis son nombre de lignes A+B est contrôlé avant sauvegarde locale.
+      Pour un fonctionnement stable, garde de préférence les mêmes noms de fichiers sur GitHub et remplace leur contenu.
     </div>
   </details>
 </div>
@@ -666,12 +621,9 @@
   </div>
 
   <div id="cameraZone" style="display:none;">
-    <div class="camera-live-title">📷 Visez le code-barres du colis</div>
-    <div class="camera-controls">
-      <button class="btn" id="startCam">▶️ Démarrer la caméra</button>
-      <button class="btn" id="toggleFlash" style="display:none; background:#555;">🔦 Allumer le flash</button>
-      <button class="btn stop" id="stopCam" style="display:none;">✖ Fermer la caméra</button>
-    </div>
+    <button class="btn" id="startCam">▶️ Démarrer la caméra</button>
+    <button class="btn" id="toggleFlash" style="display:none; background:#555;">🔦 Allumer le flash</button>
+    <button class="btn stop" id="stopCam" style="display:none;">⏹ Arrêter</button>
     <div id="cameraWrap">
       <div id="reader"></div>
     </div>
@@ -1179,10 +1131,16 @@ function updateM110PrinterProfileInfo() {
   }
 
   const speed = M110_SPEED_PROFILES[profile.speed]?.label || profile.speed || '—';
+  const presetLabels = {
+    '40x20': '40×20 Compact',
+    '40x30': '40×30 Standard',
+    '50x30': '50×30 Large',
+    '40x70': '40×70 Long'
+  };
   const label =
     profile.labelPreset === 'custom'
       ? `${profile.customWidth || 40}×${profile.customHeight || 30}`
-      : String(profile.labelPreset || '40x30').replace('x', '×');
+      : (presetLabels[profile.labelPreset] || String(profile.labelPreset || '40x30').replace('x', '×'));
 
   el.textContent =
     `💾 ${name} : ${label} mm · densité ${profile.density || 6} · ${speed} · ` +
@@ -1216,7 +1174,7 @@ function applyM110PrinterProfile(device = m110Device) {
     if (speedEl && M110_SPEED_PROFILES[profile.speed]) speedEl.value = profile.speed;
     if (densityEl && ['4','5','6','7','8'].includes(String(profile.density))) densityEl.value = String(profile.density);
     if (layoutEl && M110_LAYOUT_PROFILES[profile.layout]) layoutEl.value = profile.layout;
-    if (presetEl && ['40x30','50x30','custom'].includes(profile.labelPreset)) presetEl.value = profile.labelPreset;
+    if (presetEl && ['40x20','40x30','50x30','40x70','custom'].includes(profile.labelPreset)) presetEl.value = profile.labelPreset;
     if (widthEl && profile.customWidth) widthEl.value = profile.customWidth;
     if (heightEl && profile.customHeight) heightEl.value = profile.customHeight;
     if (adaptiveEl && typeof profile.adaptive === 'boolean') adaptiveEl.checked = profile.adaptive;
@@ -1312,12 +1270,21 @@ function recordM110AdaptiveSuccess(labelCount) {
 }
 
 async function preflightM110Batch(labelCount) {
-  if (Number(labelCount || 0) < 6) {
-    setM110PreflightInfo('Pré-test Bluetooth : non nécessaire pour moins de 6 étiquettes.', 'ok');
+  const size = getSelectedLabelSize();
+  const threshold = size.formatMode === 'long70' ? 4 : 6;
+
+  if (Number(labelCount || 0) < threshold) {
+    setM110PreflightInfo(
+      `Pré-test Bluetooth : non nécessaire pour moins de ${threshold} étiquette(s) avec ce format.`,
+      'ok'
+    );
     return true;
   }
 
-  setM110PreflightInfo(`Pré-test Bluetooth avant ${labelCount} étiquettes…`, 'wait');
+  setM110PreflightInfo(
+    `Pré-test Bluetooth avant ${labelCount} étiquettes (${size.width}×${size.height})…`,
+    'wait'
+  );
 
   let device = m110Device;
   if (!device) device = await findLastAuthorizedM110();
@@ -2169,15 +2136,31 @@ function mmToDots(mm) {
 function getSelectedLabelSize() {
   const preset = document.getElementById('labelSizePreset')?.value || '40x30';
   let width = 40, height = 30;
-  if (preset === '50x30') {
+
+  if (preset === '40x20') {
+    width = 40; height = 20;
+  } else if (preset === '50x30') {
     width = 50; height = 30;
+  } else if (preset === '40x70') {
+    width = 40; height = 70;
   } else if (preset === 'custom') {
     width = Number(document.getElementById('customLabelWidth')?.value || 40);
     height = Number(document.getElementById('customLabelHeight')?.value || 30);
   }
+
   width = Math.max(20, Math.min(50, width));
   height = Math.max(10, Math.min(100, height));
-  return { width, height, printableWidth: Math.min(width, M110_MAX_PRINTABLE_MM) };
+
+  return {
+    width,
+    height,
+    printableWidth: Math.min(width, M110_MAX_PRINTABLE_MM),
+    formatMode:
+      width <= 42 && height <= 22 ? 'compact20' :
+      width <= 42 && height >= 60 ? 'long70' :
+      width >= 49 && height <= 32 ? 'wide30' :
+      'standard'
+  };
 }
 
 function updateLabelSizeUi() {
@@ -2187,6 +2170,24 @@ function updateLabelSizeUi() {
   const size = getSelectedLabelSize();
   const badge = document.getElementById('activeLabelSize');
   if (badge) badge.textContent = `${size.width} × ${size.height} mm`;
+
+  const formatHint = document.getElementById('m110FormatHint');
+  if (formatHint) {
+    if (size.formatMode === 'compact20') {
+      formatHint.textContent = '⚡ 40×20 Compact : code-barres optimisé en hauteur, ASIN/code en gras, description jusqu’à 2 lignes. Moins de données Bluetooth = impression plus rapide.';
+      formatHint.style.color = '#00695c';
+    } else if (size.formatMode === 'long70') {
+      formatHint.textContent = '📜 40×70 Long : grand code-barres, ASIN/code agrandis et description très lisible jusqu’à 6 lignes. Les gros lots sont automatiquement sécurisés par sous-lots plus petits.';
+      formatHint.style.color = '#4a148c';
+    } else if (size.formatMode === 'wide30') {
+      formatHint.textContent = '↔️ 50×30 Large : code-barres centré avec marge blanche de sécurité à gauche et à droite.';
+      formatHint.style.color = '#0d47a1';
+    } else {
+      formatHint.textContent = '✅ 40×30 Standard : mise en page équilibrée actuelle.';
+      formatHint.style.color = '#37474f';
+    }
+  }
+
   const printBtn = document.getElementById('printM110Btn');
   if (printBtn && printBtn.dataset.count) {
     printBtn.textContent = `🖨️ Imprimer sur M110 (${printBtn.dataset.count} étiquette(s)) — ${size.width}×${size.height} mm`;
@@ -2203,7 +2204,7 @@ function updateLabelSizeUi() {
 function restoreLabelSizeUi() {
   try {
     const preset = localStorage.getItem('m110LabelSizePreset');
-    if (preset && ['40x30','50x30','custom'].includes(preset)) document.getElementById('labelSizePreset').value = preset;
+    if (preset && ['40x20','40x30','50x30','40x70','custom'].includes(preset)) document.getElementById('labelSizePreset').value = preset;
     const w = localStorage.getItem('m110CustomWidth');
     const h = localStorage.getItem('m110CustomHeight');
     if (w) document.getElementById('customLabelWidth').value = w;
@@ -2309,85 +2310,199 @@ function generateM110LabelCanvas(match, trackingValue) {
   ctx.imageSmoothingEnabled = false;
   ctx.textBaseline = 'alphabetic';
 
-  const is30High = size.height <= 32;
   const layout = getM110LayoutProfile();
-  const side = Math.max(3, Math.round(W * layout.sideRatio));
-  const trackingFont = Math.max(10, Math.min(14, Math.round(H * layout.trackFontRatio)));
-  const asinFont = Math.max(14, Math.min(21, Math.round(H * (layout.asinFontRatio - 0.004))));
-  const codeFont = Math.max(15, Math.min(22, Math.round(H * (layout.codeFontRatio - 0.004))));
-  // V27 : description produit un peu plus grande pour occuper l'espace libre.
-  const titleFont = Math.max(13, Math.min(19, Math.round(H * (layout.titleFontRatio + 0.018))));
+  const isCompact20 = size.formatMode === 'compact20';
+  const isLong70 = size.formatMode === 'long70';
+  const isWide30Label = size.formatMode === 'wide30';
+  const is30High = size.height <= 32;
 
-  let y = Math.max(trackingFont + 2, Math.round(H * 0.060));
+  const side = Math.max(
+    isCompact20 || isLong70 ? mmToDots(1.3) : 3,
+    Math.round(W * layout.sideRatio)
+  );
+
+  let trackingFont;
+  let asinFont;
+  let codeFont;
+  let titleFont;
+  let targetBh;
+  let maxTitleLines;
+  let titleDownRatio;
+  let barcodeGapAfter;
+  let titleGap;
+
+  if (isCompact20) {
+    trackingFont = 9;
+    asinFont = 13;
+    codeFont = 14;
+    titleFont = 12;
+
+    const compactBhByLayout = {
+      normal: mmToDots(5.4),
+      wide: mmToDots(6.0),
+      xxl: mmToDots(6.4)
+    };
+    const layoutKey = document.getElementById('m110LayoutProfile')?.value || 'wide';
+    targetBh = compactBhByLayout[layoutKey] || mmToDots(6.0);
+
+    maxTitleLines = 2;
+    titleDownRatio = 0.04;
+    barcodeGapAfter = 4;
+    titleGap = 2;
+  } else if (isLong70) {
+    trackingFont = 16;
+    asinFont = 26;
+    codeFont = 28;
+    titleFont = 28;
+
+    const longBhByLayout = {
+      normal: mmToDots(17.0),
+      wide: mmToDots(19.0),
+      xxl: mmToDots(20.0)
+    };
+    const layoutKey = document.getElementById('m110LayoutProfile')?.value || 'wide';
+    targetBh = longBhByLayout[layoutKey] || mmToDots(19.0);
+
+    maxTitleLines = 6;
+    titleDownRatio = 0.11;
+    barcodeGapAfter = mmToDots(2.0);
+    titleGap = mmToDots(1.5);
+  } else {
+    trackingFont = Math.max(10, Math.min(14, Math.round(H * layout.trackFontRatio)));
+    asinFont = Math.max(14, Math.min(21, Math.round(H * (layout.asinFontRatio - 0.004))));
+    codeFont = Math.max(15, Math.min(22, Math.round(H * (layout.codeFontRatio - 0.004))));
+    titleFont = Math.max(13, Math.min(19, Math.round(H * (layout.titleFontRatio + 0.018))));
+    targetBh = Math.max(
+      62,
+      Math.round(H * (is30High ? layout.barcodeHeight30 : layout.barcodeHeightOther))
+    );
+    maxTitleLines = 3;
+    titleDownRatio = 0.16;
+    barcodeGapAfter = Math.max(Math.round(H * 0.040), asinFont - 2);
+    titleGap = Math.max(2, Math.round(H * 0.008));
+  }
+
+  let y;
+  if (isCompact20) {
+    y = trackingFont + 1;
+  } else if (isLong70) {
+    y = Math.max(trackingFont + 3, mmToDots(2.5));
+  } else {
+    y = Math.max(trackingFont + 2, Math.round(H * 0.060));
+  }
+
   ctx.textAlign = 'left';
   ctx.font = `${trackingFont}px Arial`;
   const trackingText = `Colis - N° de suivi: ${trackingValue || ''}`;
-  ctx.fillText(truncateTextToWidth(ctx, trackingText, W - side * 2), side, y);
+  ctx.fillText(
+    truncateTextToWidth(ctx, trackingText, W - side * 2),
+    side,
+    y
+  );
 
   const barcodeValue = String(match.pdfBarcodeValue || match.asin || '');
-  const targetBh = Math.max(62, Math.round(H * (is30High ? layout.barcodeHeight30 : layout.barcodeHeightOther)));
-  const barcodeTop = y + Math.max(4, Math.round(H * 0.015));
+  const barcodeTop =
+    y +
+    (isCompact20 ? 2 :
+     isLong70 ? mmToDots(1.2) :
+     Math.max(4, Math.round(H * 0.015)));
 
-  // V26 — sécurité spécifique aux étiquettes 49/50 × 30 mm.
-  // La tête M110 imprime ~48 mm : on réserve au minimum 2,25 mm blancs
-  // de chaque côté DANS la zone imprimable. Sur une étiquette de 50 mm,
-  // cela donne environ 3,25 mm de marge physique par côté.
-  // Largeur maxi du code-barres : ~43,5 mm.
-  const isWide30Label = size.width >= 49 && size.height <= 32;
-  const barcodeSafeSide = isWide30Label
-    ? Math.max(side, mmToDots(2.25))
-    : side;
+  const barcodeSafeSide =
+    isWide30Label
+      ? Math.max(side, mmToDots(2.25))
+      : (isCompact20 || isLong70)
+        ? Math.max(side, mmToDots(1.5))
+        : side;
+
   const maxBw = W - barcodeSafeSide * 2;
   const maxBh = targetBh;
-  const candidates = (size.width >= 49 ? layout.moduleCandidates50 : layout.moduleCandidates40) || [2, 1];
+  const candidates =
+    (size.width >= 49 ? layout.moduleCandidates50 : layout.moduleCandidates40) || [2, 1];
 
   let bestCanvas = null;
   let bestFits = false;
+
   for (const moduleWidth of candidates) {
-    const bc = document.createElement('canvas');
-    JsBarcode(bc, barcodeValue, {
+    const bcCandidate = document.createElement('canvas');
+
+    JsBarcode(bcCandidate, barcodeValue, {
       format: 'CODE128',
       displayValue: false,
-      margin: layout.barcodeMargin,
+      margin: 0,
       height: targetBh,
       width: moduleWidth
     });
-    if (!bestCanvas || (bc.width > bestCanvas.width && bc.width <= maxBw + 1)) bestCanvas = bc;
-    if (bc.width <= maxBw + 1 && bc.height <= maxBh + 1) { bestCanvas = bc; bestFits = true; break; }
+
+    if (
+      !bestCanvas ||
+      (bcCandidate.width > bestCanvas.width && bcCandidate.width <= maxBw + 1)
+    ) {
+      bestCanvas = bcCandidate;
+    }
+
+    if (bcCandidate.width <= maxBw + 1 && bcCandidate.height <= maxBh + 1) {
+      bestCanvas = bcCandidate;
+      bestFits = true;
+      break;
+    }
   }
+
   const bc = bestCanvas || document.createElement('canvas');
 
   let dw = bc.width;
   let dh = bc.height;
+
   if (!bestFits && (dw > maxBw || dh > maxBh)) {
     const scale = Math.min(maxBw / dw, maxBh / dh);
     dw = Math.max(1, Math.floor(dw * scale));
     dh = Math.max(1, Math.floor(dh * scale));
   }
+
   const barcodeX = Math.round((W - dw) / 2);
   ctx.drawImage(bc, barcodeX, barcodeTop, dw, dh);
 
-  y = barcodeTop + dh + Math.max(Math.round(H * 0.040), asinFont - 2);
+  y = barcodeTop + dh + barcodeGapAfter;
   ctx.textAlign = 'center';
   ctx.font = `bold ${asinFont}px Arial`;
-  ctx.fillText(truncateTextToWidth(ctx, String(match.asin || ''), W - side * 2), W / 2, y);
+  ctx.fillText(
+    truncateTextToWidth(ctx, String(match.asin || ''), W - side * 2),
+    W / 2,
+    y
+  );
 
-  y += codeFont + Math.max(0, Math.round(H * 0.002));
+  y += codeFont + (isCompact20 ? 0 : Math.max(0, Math.round(H * 0.002)));
   ctx.font = `bold ${codeFont}px Arial`;
-  ctx.fillText(truncateTextToWidth(ctx, barcodeValue, W - side * 2), W / 2, y);
+  ctx.fillText(
+    truncateTextToWidth(ctx, barcodeValue, W - side * 2),
+    W / 2,
+    y
+  );
 
-  y += titleFont + Math.max(2, Math.round(H * 0.008));
+  y += titleFont + titleGap;
   ctx.font = `${titleFont}px Arial`;
+
   const remaining = Math.max(0, H - y - 2);
-  const lineStep = titleFont + Math.max(1, Math.round(titleFont * 0.10));
+  const lineStep =
+    isCompact20
+      ? titleFont + 1
+      : isLong70
+        ? titleFont + 4
+        : titleFont + Math.max(1, Math.round(titleFont * 0.10));
+
   const maxLinesByRoom = Math.max(1, Math.floor(remaining / lineStep) + 1);
-  const maxLinesWanted = 3;
-  const maxLines = Math.max(1, Math.min(maxLinesWanted, maxLinesByRoom));
-  const lines = wrapM110Text(ctx, match.productName || '', W - side * 2, maxLines);
+  const maxLines = Math.max(1, Math.min(maxTitleLines, maxLinesByRoom));
+
+  const lines = wrapM110Text(
+    ctx,
+    match.productName || '',
+    W - side * 2,
+    maxLines
+  );
+
   const blockHeight = Math.max(0, (lines.length - 1) * lineStep);
   const extraDown = Math.max(0, H - 4 - y - blockHeight);
-  // Descend légèrement davantage le bloc description pour utiliser le vide.
-  y += Math.min(extraDown, Math.round(H * 0.16));
+  y += Math.min(extraDown, Math.round(H * titleDownRatio));
+
   for (const line of lines) {
     if (y > H - 2) break;
     ctx.fillText(line, W / 2, y);
@@ -2415,7 +2530,12 @@ async function printRasterBatchM110(rasters, density = 6, onLabelProgress = null
   // V24 : la M110 devient parfois instable après 5 étiquettes rapides.
   // On limite donc chaque sous-lot à 5 puis on laisse le tampon se vider
   // et on réinitialise proprement les réglages avant de continuer.
-  const MICRO_BATCH_SIZE = Math.max(1, Number(profile.microBatchSize || 5));
+  const currentSize = getSelectedLabelSize();
+  const configuredMicroBatch = Math.max(1, Number(profile.microBatchSize || 5));
+  const MICRO_BATCH_SIZE =
+    currentSize.formatMode === 'long70'
+      ? Math.min(3, configuredMicroBatch)
+      : configuredMicroBatch;
   const microBatches = Math.ceil(list.length / MICRO_BATCH_SIZE);
   let totalWrites = 0;
   let globalIndex = 0;
@@ -2482,8 +2602,12 @@ async function printRasterBatchM110(rasters, density = 6, onLabelProgress = null
       if (isVeryLast) {
         await sleep(Math.max(650, profile.afterFooter || 0));
       } else if (isEndOfMicroBatch) {
-        // Gros vidage de tampon après chaque bloc de 5.
-        await sleep(950);
+        // 40×70 contient beaucoup plus de données : pause renforcée.
+        await sleep(
+          currentSize.formatMode === 'long70'
+            ? Math.max(1350, Number(profile.microBatchPause || 0))
+            : Math.max(950, Number(profile.microBatchPause || 0))
+        );
       } else {
         await sleep(profile.betweenLabels);
       }
@@ -2547,7 +2671,11 @@ function queueM110Print(matches, trackingValue) {
       const rasters = copy.map(item => rasterizeM110Match(item, trackingValue));
 
       setM110Progress(0, true);
-      const microBatchSize = Math.max(1, Number(profile.microBatchSize || 5));
+      const configuredMicroBatchSize = Math.max(1, Number(profile.microBatchSize || 5));
+      const microBatchSize =
+        size.formatMode === 'long70'
+          ? Math.min(3, configuredMicroBatchSize)
+          : configuredMicroBatchSize;
       const microBatchCount = Math.ceil(copy.length / microBatchSize);
       const batchInfo =
         microBatchCount > 1
@@ -2755,56 +2883,123 @@ async function getSavedFile(key) {
 }
 
 
-const GITHUB_FILES_CONFIG_KEY = "vine-github-files-v33";
+const GITHUB_FILES_CONFIG_KEY = "vine-github-files-v32";
 
-function detectGithubPagesRepository() {
+function detectGithubPagesContext() {
   const host = String(location.hostname || '').toLowerCase();
-  const pathname = String(location.pathname || '/');
+  const rawPath = String(location.pathname || '/');
+  const pathParts = rawPath.split('/').filter(Boolean);
 
-  // GitHub Pages utilisateur : https://OWNER.github.io/
-  // GitHub Pages projet      : https://OWNER.github.io/REPO/
-  // Ici le site est un projet : /scan-suivi/ -> dépôt scan-suivi.
+  // Retire index.html ou un nom de fichier éventuel.
+  const cleanParts = pathParts.filter((part, index) => {
+    if (index === pathParts.length - 1 && /\.[a-z0-9]{2,6}$/i.test(part)) return false;
+    return true;
+  });
+
+  let owner = '';
   if (host.endsWith('.github.io')) {
-    const owner = host.slice(0, -'.github.io'.length);
-    const firstSegment = pathname.split('/').filter(Boolean)[0] || '';
-    if (owner) {
-      if (firstSegment && firstSegment.toLowerCase() !== `${owner}.github.io`.toLowerCase()) {
-        return {
-          owner,
-          repo: firstSegment,
-          pagesBasePath: `/${firstSegment}/`,
-          source: 'project-pages-path'
-        };
-      }
-      return {
-        owner,
-        repo: `${owner}.github.io`,
-        pagesBasePath: '/',
-        source: 'user-pages-hostname'
-      };
-    }
+    owner = host.slice(0, -'.github.io'.length);
   }
 
-  // Secours correspondant au dépôt connu de ce scanner.
+  // Si le site est servi sous /scan-suivi/, on le récupère directement.
+  // Si Chrome masque le chemin dans la barre ou si l'URL est à la racine,
+  // on garde scan-suivi comme dossier préféré car c'est la structure utilisée ici.
+  const detectedFolder = cleanParts[0] || '';
+  const preferredFolder =
+    detectedFolder && detectedFolder.toLowerCase() !== 'index.html'
+      ? detectedFolder
+      : 'scan-suivi';
+
   return {
-    owner: 'booking9222-jpg',
-    repo: 'scan-suivi',
-    pagesBasePath: '/scan-suivi/',
-    source: 'fallback-scan-suivi'
+    host,
+    owner: owner || '222-ipg',
+    userSiteRepo: owner ? `${owner}.github.io` : '222-ipg.github.io',
+    detectedFolder,
+    preferredFolder
   };
 }
 
-const GITHUB_REPOSITORY = detectGithubPagesRepository();
-const GITHUB_OWNER = GITHUB_REPOSITORY.owner;
-const GITHUB_REPO = GITHUB_REPOSITORY.repo;
-const GITHUB_PAGES_BASE_PATH = GITHUB_REPOSITORY.pagesBasePath || '/';
+const GITHUB_CONTEXT = detectGithubPagesContext();
 
-function updateGithubRepoInfo() {
-  const text = `📦 Dépôt détecté : ${GITHUB_OWNER}/${GITHUB_REPO} · Pages : ${GITHUB_PAGES_BASE_PATH}`;
+// Source réellement retenue après test API.
+// Deux structures GitHub Pages sont prises en charge :
+// 1) dépôt utilisateur owner.github.io + dossier scan-suivi/
+// 2) dépôt projet scan-suivi servi sur owner.github.io/scan-suivi/
+let GITHUB_RESOLVED_SOURCE = null;
+
+function getGithubSourceCandidates() {
+  const owner = GITHUB_CONTEXT.owner;
+  const folder = GITHUB_CONTEXT.preferredFolder || 'scan-suivi';
+
+  return [
+    {
+      owner,
+      repo: GITHUB_CONTEXT.userSiteRepo,
+      apiBasePath: folder,
+      pagesPrefix: '',
+      label: `${owner}/${GITHUB_CONTEXT.userSiteRepo} · dossier ${folder}/`
+    },
+    {
+      owner,
+      repo: folder,
+      apiBasePath: '',
+      pagesPrefix: folder,
+      label: `${owner}/${folder} · projet GitHub Pages /${folder}/`
+    },
+    // Dernier secours : dépôt utilisateur à la racine.
+    {
+      owner,
+      repo: GITHUB_CONTEXT.userSiteRepo,
+      apiBasePath: '',
+      pagesPrefix: '',
+      label: `${owner}/${GITHUB_CONTEXT.userSiteRepo} · racine`
+    }
+  ];
+}
+
+function updateGithubRepoInfo(source = GITHUB_RESOLVED_SOURCE) {
+  const folderText = GITHUB_CONTEXT.detectedFolder
+    ? ` · URL : /${GITHUB_CONTEXT.detectedFolder}/`
+    : ` · dossier attendu : /${GITHUB_CONTEXT.preferredFolder}/`;
+
+  const text = source
+    ? `📦 Source GitHub : ${source.label}${folderText}`
+    : `📦 Recherche GitHub : ${GITHUB_CONTEXT.owner} · ${folderText}`;
+
   const a = document.getElementById('githubRepoInfo1');
   const b = document.getElementById('githubRepoInfo2');
   if (a) a.textContent = text;
   if (b) b.textContent = text;
+}
+
+function pathStartsWithFolder(path, folder) {
+  const clean = String(path || '').replace(/^\/+/, '');
+  const f = String(folder || '').replace(/^\/+|\/+$/g, '');
+  if (!f) return true;
+  return clean === f || clean.startsWith(f + '/');
+}
+
+function normalizePathForResolvedSource(path, source = GITHUB_RESOLVED_SOURCE) {
+  let clean = String(path || '').replace(/^\/+/, '');
+  if (!source || !clean) return clean;
+
+  const base = String(source.apiBasePath || '').replace(/^\/+|\/+$/g, '');
+
+  // Dépôt owner.github.io + dossier scan-suivi : le chemin API complet
+  // doit contenir scan-suivi/.
+  if (base && !pathStartsWithFolder(clean, base)) {
+    clean = `${base}/${clean}`;
+  }
+
+  // Dépôt projet scan-suivi : l'API renvoie les chemins sans scan-suivi/.
+  if (!base && source.repo === GITHUB_CONTEXT.preferredFolder) {
+    const folder = GITHUB_CONTEXT.preferredFolder;
+    if (pathStartsWithFolder(clean, folder)) {
+      clean = clean.slice(folder.length).replace(/^\/+/, '');
+    }
+  }
+
+  return clean;
 }
 
 function formatFileDate(value) {
@@ -2838,9 +3033,12 @@ function readGithubFileConfig() {
 
     // Migration des chemins saisis avec les anciennes versions.
     if (!raw) {
-      raw = localStorage.getItem("vine-github-files-v23");
-      if (raw) {
-        try { localStorage.setItem(GITHUB_FILES_CONFIG_KEY, raw); } catch (_) {}
+      for (const oldKey of ["vine-github-files-v31", "vine-github-files-v23"]) {
+        raw = localStorage.getItem(oldKey);
+        if (raw) {
+          try { localStorage.setItem(GITHUB_FILES_CONFIG_KEY, raw); } catch (_) {}
+          break;
+        }
       }
     }
 
@@ -2900,8 +3098,7 @@ function scoreGithubPath(path, kind) {
 }
 
 async function listGithubSpreadsheetFiles() {
-  const all = [];
-  const apiBase = `https://api.github.com/repos/${encodeURIComponent(GITHUB_OWNER)}/${encodeURIComponent(GITHUB_REPO)}`;
+  const attempts = [];
 
   async function fetchJson(url) {
     const res = await fetch(url, {
@@ -2921,91 +3118,147 @@ async function listGithubSpreadsheetFiles() {
     return res.json();
   }
 
-  // V31 : récupère d'abord la branche par défaut, puis toute l'arborescence
-  // en un seul appel. Cela retrouve aussi les fichiers Excel rangés dans
-  // des sous-dossiers non prévus par les anciennes versions.
-  try {
-    const repoInfo = await fetchJson(apiBase);
-    const branch = repoInfo.default_branch || 'main';
-    const tree = await fetchJson(
-      `${apiBase}/git/trees/${encodeURIComponent(branch)}?recursive=1`
-    );
+  for (const source of getGithubSourceCandidates()) {
+    const apiBase =
+      `https://api.github.com/repos/${encodeURIComponent(source.owner)}/${encodeURIComponent(source.repo)}`;
 
-    for (const item of Array.isArray(tree.tree) ? tree.tree : []) {
-      if (item.type === 'blob' && /\.(xlsx|xls|csv)$/i.test(item.path || '')) {
-        all.push({
+    try {
+      const repoInfo = await fetchJson(apiBase);
+      const branch = repoInfo.default_branch || 'main';
+      const tree = await fetchJson(
+        `${apiBase}/git/trees/${encodeURIComponent(branch)}?recursive=1`
+      );
+
+      const files = [];
+      const base = String(source.apiBasePath || '').replace(/^\/+|\/+$/g, '');
+
+      for (const item of Array.isArray(tree.tree) ? tree.tree : []) {
+        if (item.type !== 'blob' || !/\.(xlsx|xls|csv)$/i.test(item.path || '')) continue;
+
+        if (base && !pathStartsWithFolder(item.path, base)) continue;
+
+        files.push({
           path: item.path,
           name: basenameFromPath(item.path),
           size: Number(item.size || 0)
         });
       }
-    }
 
-    if (all.length) return all;
-  } catch (err) {
-    console.warn('GitHub tree API indisponible, essai via contents :', err);
-  }
-
-  // Fallback : ancienne méthode /contents.
-  const fetchFolder = async (path = "") => {
-    const suffix = path ? `/${path.replace(/^\/+|\/+$/g, "")}` : "";
-    const url = `${apiBase}/contents${suffix}`;
-    const items = await fetchJson(url);
-
-    for (const item of Array.isArray(items) ? items : []) {
-      if (item.type === "file" && /\.(xlsx|xls|csv)$/i.test(item.name || "")) {
-        all.push({ path:item.path, name:item.name, size:item.size || 0 });
+      if (files.length) {
+        GITHUB_RESOLVED_SOURCE = source;
+        updateGithubRepoInfo(source);
+        return files;
       }
+
+      attempts.push(`${source.label} : aucun Excel/CSV`);
+    } catch (err) {
+      attempts.push(`${source.label} : ${err.message || err}`);
     }
-
-    return Array.isArray(items) ? items : [];
-  };
-
-  const root = await fetchFolder("");
-  const folders = root.filter(
-    x => x.type === "dir" && /^(data|files|fichiers|excel|exports?)$/i.test(x.name || "")
-  );
-
-  for (const folder of folders.slice(0, 6)) {
-    try { await fetchFolder(folder.path); } catch (_) {}
   }
 
-  return all;
+  throw new Error(
+    `Aucune source GitHub valide trouvée. ` +
+    attempts.join(' | ')
+  );
 }
 
 async function autoDetectGithubFilePaths(force = false) {
   let config = readGithubFileConfig();
-  if (!force && config.primaryPath && config.secondaryPath) {
-    fillGithubPathInputs(config);
-    return config;
-  }
 
   setGithubFileStatus("primary", "☁️ GitHub : recherche du fichier Order History…", "wait");
   setGithubFileStatus("secondary", "☁️ GitHub : recherche du fichier de correspondance…", "wait");
 
+  // V32 : on résout toujours d'abord la vraie structure GitHub
+  // (dossier scan-suivi ou dépôt projet scan-suivi).
   const files = await listGithubSpreadsheetFiles();
-  if (!files.length) throw new Error("Aucun fichier .xlsx/.xls/.csv trouvé dans le dépôt GitHub.");
+  if (!files.length) {
+    throw new Error("Aucun fichier .xlsx/.xls/.csv trouvé dans scan-suivi.");
+  }
 
-  const primary = files.slice().sort((a,b) => scoreGithubPath(b.path,"primary") - scoreGithubPath(a.path,"primary"))[0];
-  const secondary = files.slice().sort((a,b) => scoreGithubPath(b.path,"secondary") - scoreGithubPath(a.path,"secondary"))[0];
+  if (!force && config.primaryPath && config.secondaryPath) {
+    const normalizedPrimary = normalizePathForResolvedSource(config.primaryPath);
+    const normalizedSecondary = normalizePathForResolvedSource(config.secondaryPath);
+
+    const availablePaths = new Set(files.map(f => String(f.path || '')));
+
+    if (
+      availablePaths.has(normalizedPrimary) &&
+      availablePaths.has(normalizedSecondary)
+    ) {
+      config = {
+        ...config,
+        primaryPath: normalizedPrimary,
+        secondaryPath: normalizedSecondary,
+        sourceRepo: GITHUB_RESOLVED_SOURCE?.repo || '',
+        sourceBasePath: GITHUB_RESOLVED_SOURCE?.apiBasePath || ''
+      };
+      saveGithubFileConfig(config);
+      fillGithubPathInputs(config);
+      return config;
+    }
+  }
+
+  const primary = files.slice().sort(
+    (a,b) => scoreGithubPath(b.path,"primary") - scoreGithubPath(a.path,"primary")
+  )[0];
+
+  const secondary = files.slice().sort(
+    (a,b) => scoreGithubPath(b.path,"secondary") - scoreGithubPath(a.path,"secondary")
+  )[0];
 
   if (!primary || scoreGithubPath(primary.path,"primary") <= 0) {
-    throw new Error("Impossible d'identifier automatiquement Order History.");
-  }
-  if (!secondary || scoreGithubPath(secondary.path,"secondary") <= 0 || secondary.path === primary.path) {
-    throw new Error("Impossible d'identifier automatiquement le fichier de correspondance.");
+    throw new Error("Impossible d'identifier automatiquement Order History dans scan-suivi.");
   }
 
-  config = { primaryPath:primary.path, secondaryPath:secondary.path, detectedAt:Date.now() };
+  if (
+    !secondary ||
+    scoreGithubPath(secondary.path,"secondary") <= 0 ||
+    secondary.path === primary.path
+  ) {
+    throw new Error("Impossible d'identifier automatiquement le fichier de correspondance dans scan-suivi.");
+  }
+
+  config = {
+    primaryPath: primary.path,
+    secondaryPath: secondary.path,
+    detectedAt: Date.now(),
+    sourceRepo: GITHUB_RESOLVED_SOURCE?.repo || '',
+    sourceBasePath: GITHUB_RESOLVED_SOURCE?.apiBasePath || ''
+  };
+
   saveGithubFileConfig(config);
   fillGithubPathInputs(config);
   return config;
 }
 
 function githubPagesFileUrl(path, cacheBust = true) {
-  const clean = String(path || "").replace(/^\/+/, "");
-  const base = String(GITHUB_PAGES_BASE_PATH || "/").replace(/\/+$/, "") + "/";
-  const url = new URL(base + clean, location.origin);
+  let clean = String(path || "").replace(/^\/+/, "");
+  const source = GITHUB_RESOLVED_SOURCE;
+
+  if (source) {
+    // Dépôt projet scan-suivi : le chemin API est "fichier.xlsx"
+    // mais l'URL Pages est /scan-suivi/fichier.xlsx.
+    const prefix = String(source.pagesPrefix || '').replace(/^\/+|\/+$/g, '');
+    if (prefix && !pathStartsWithFolder(clean, prefix)) {
+      clean = `${prefix}/${clean}`;
+    }
+
+    // Dépôt utilisateur + dossier scan-suivi : le chemin renvoyé par l'API
+    // contient déjà scan-suivi/. Si un ancien chemin local ne l'a pas,
+    // on le rajoute.
+    const base = String(source.apiBasePath || '').replace(/^\/+|\/+$/g, '');
+    if (base && !pathStartsWithFolder(clean, base)) {
+      clean = `${base}/${clean}`;
+    }
+  } else {
+    // Secours : structure attendue par l'utilisateur.
+    const folder = GITHUB_CONTEXT.preferredFolder || 'scan-suivi';
+    if (folder && !pathStartsWithFolder(clean, folder)) {
+      clean = `${folder}/${clean}`;
+    }
+  }
+
+  const url = new URL("/" + clean, location.origin);
   if (cacheBust) url.searchParams.set("vfile", String(Date.now()));
   return url.toString();
 }
@@ -3047,67 +3300,11 @@ function remoteLooksSame(record, remote) {
   return false;
 }
 
-function githubApiFileUrl(path) {
-  const clean = String(path || "").replace(/^\/+/, "");
-  const encodedPath = clean.split("/").filter(Boolean).map(encodeURIComponent).join("/");
-  return `https://api.github.com/repos/${encodeURIComponent(GITHUB_OWNER)}/${encodeURIComponent(GITHUB_REPO)}/contents/${encodedPath}`;
-}
-
-function countValidCorrespondenceRows(arrayBuffer) {
-  try {
-    const data = new Uint8Array(arrayBuffer);
-    const workbook = XLSX.read(data, { type: "array" });
-    const sheetName = workbook.SheetNames[0];
-    if (!sheetName) return 0;
-    const sheet = workbook.Sheets[sheetName];
-    const json = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
-    if (!json.length) return 0;
-    return json.slice(1).filter(r => String(r?.[0] || "").trim() && String(r?.[1] || "").trim()).length;
-  } catch (_) {
-    return 0;
-  }
-}
-
-async function fetchGithubApiRaw(path) {
-  const url = githubApiFileUrl(path);
-  const res = await fetch(url, {
-    cache: "no-store",
-    headers: {
-      "Accept": "application/vnd.github.raw+json",
-      "X-GitHub-Api-Version": "2022-11-28"
-    }
-  });
-  if (!res.ok) {
-    let detail = "";
-    try {
-      const txt = await res.text();
-      detail = txt ? ` — ${txt.slice(0,180)}` : "";
-    } catch (_) {}
-    throw new Error(`GitHub API direct ${res.status}${detail}`);
-  }
-  return { res, arrayBuffer: await res.arrayBuffer(), url };
-}
-
-async function downloadGithubFile(kind, path, remoteMeta, forceApi = false) {
-  // V32 : le fichier de correspondance passe directement par l'API GitHub.
-  // Cela contourne le cache/CDN GitHub Pages qui pouvait servir l'ancien XLSX.
-  let res;
-  let arrayBuffer;
-  let sourceUrl = "";
-  const useApiDirect = forceApi || kind === "secondary";
-
-  if (useApiDirect) {
-    const direct = await fetchGithubApiRaw(path);
-    res = direct.res;
-    arrayBuffer = direct.arrayBuffer;
-    sourceUrl = direct.url;
-  } else {
-    const url = githubPagesFileUrl(path, true);
-    res = await fetch(url, { cache:"no-store" });
-    if (!res.ok) throw new Error(`Téléchargement impossible (${res.status})`);
-    arrayBuffer = await res.arrayBuffer();
-    sourceUrl = url;
-  }
+async function downloadGithubFile(kind, path, remoteMeta) {
+  const url = githubPagesFileUrl(path, true);
+  const res = await fetch(url, { cache:"no-store" });
+  if (!res.ok) throw new Error(`Téléchargement impossible (${res.status})`);
+  const arrayBuffer = await res.arrayBuffer();
 
   const lastModifiedHeader = res.headers.get("last-modified") || remoteMeta?.lastModified || "";
   const etag = res.headers.get("etag") || remoteMeta?.etag || "";
@@ -3121,39 +3318,12 @@ async function downloadGithubFile(kind, path, remoteMeta, forceApi = false) {
   };
 
   const key = kind === "primary" ? "orderHistory" : "correspondence";
-  let parsedRowCount = null;
-
-  if (kind === "secondary") {
-    parsedRowCount = countValidCorrespondenceRows(arrayBuffer);
-    if (parsedRowCount < 1) {
-      throw new Error("Le fichier de correspondance téléchargé depuis GitHub ne contient aucune ligne ASIN + code-barres valide.");
-    }
-
-    // Protection anti-écrasement : si GitHub renvoie soudainement 1 ligne alors
-    // que le téléphone possède une grosse copie locale, on conserve la copie locale.
-    try {
-      const previous = await getSavedFile(key);
-      const previousCount = previous?.data ? countValidCorrespondenceRows(previous.data) : 0;
-      if (parsedRowCount <= 1 && previousCount >= 100) {
-        throw new Error(
-          `Fichier GitHub suspect : ${parsedRowCount} ligne valide contre ${previousCount} dans la copie locale. ` +
-          "Ancienne copie conservée."
-        );
-      }
-    } catch (err) {
-      if (String(err?.message || err).includes("Fichier GitHub suspect")) throw err;
-    }
-  }
-
-  // Sauvegarde locale uniquement APRÈS validation.
   await saveFileLocally(key, fakeFile, arrayBuffer, {
     source:"github",
     githubPath:path,
     githubLastModified:lastModifiedHeader,
     githubEtag:etag,
     githubSize:arrayBuffer.byteLength,
-    githubDirectApi:useApiDirect,
-    parsedRowCount,
     downloadedAt:Date.now()
   });
 
@@ -3168,15 +3338,12 @@ async function downloadGithubFile(kind, path, remoteMeta, forceApi = false) {
       githubLastModified:lastModifiedHeader,
       githubEtag:etag,
       githubSize:arrayBuffer.byteLength,
-      githubDirectApi:useApiDirect,
-      parsedRowCount,
-      downloadedAt:Date.now(),
-      sourceUrl
+      downloadedAt:Date.now()
     }
   };
 }
 
-async function syncOneGithubFile(kind, path, quiet = false, forceDownload = false) {
+async function syncOneGithubFile(kind, path, quiet = false) {
   const label = kind === "primary" ? "Order History" : "Correspondance";
   const key = kind === "primary" ? "orderHistory" : "correspondence";
   const statusKind = kind === "primary" ? "primary" : "secondary";
@@ -3189,69 +3356,46 @@ async function syncOneGithubFile(kind, path, quiet = false, forceDownload = fals
     getSavedFile(key)
   ]);
 
-  // Si l'ancienne copie locale de correspondance est minuscule (le bug à 1 ligne),
-  // V32 force immédiatement un vrai téléchargement depuis l'API GitHub.
-  let localCorrespondenceCount = null;
-  if (kind === "secondary" && saved?.data) {
-    localCorrespondenceCount = countValidCorrespondenceRows(saved.data);
-  }
-  const suspiciousLocal = kind === "secondary" && Number(localCorrespondenceCount || 0) <= 5;
-  const mustDownload = forceDownload || suspiciousLocal || !remoteLooksSame(saved, remote);
-
-  if (!mustDownload) {
+  if (remoteLooksSame(saved, remote)) {
     const meta = {
       source:"github",
       githubPath:path,
       githubLastModified:saved.githubLastModified || remote.lastModified,
-      lastModified:saved.lastModified,
-      parsedRowCount: kind === "secondary" ? localCorrespondenceCount : null
+      lastModified:saved.lastModified
     };
     if (kind === "primary") processPrimaryFileData(saved.data, saved.name || basenameFromPath(path), true, meta);
     else processSecondFileData(saved.data, saved.name || basenameFromPath(path), true, meta);
 
-    const countHtml = kind === "secondary" && localCorrespondenceCount != null
-      ? `<br>📊 Correspondances vérifiées : <strong>${localCorrespondenceCount}</strong>`
-      : "";
     setGithubFileStatus(statusKind,
-      `✅ GitHub à jour : <strong>${escapeHtml(basenameFromPath(path))}</strong>${countHtml}<br>📅 Dernière mise à jour : <strong>${escapeHtml(formatFileDate(meta.githubLastModified || meta.lastModified))}</strong>`,
+      `✅ GitHub à jour : <strong>${escapeHtml(basenameFromPath(path))}</strong><br>📅 Dernière mise à jour : <strong>${escapeHtml(formatFileDate(meta.githubLastModified || meta.lastModified))}</strong>`,
       "ok");
-    return { changed:false, rowCount:localCorrespondenceCount };
+    return { changed:false };
   }
 
-  const why = forceDownload ? "vérification forcée" : (suspiciousLocal ? "copie locale suspecte" : "nouvelle version détectée");
-  const directText = kind === "secondary" ? " via API GitHub directe" : "";
-  setGithubFileStatus(statusKind,
-    `⬇️ ${escapeHtml(why)} : téléchargement${directText} de <strong>${escapeHtml(basenameFromPath(path))}</strong>…`,
-    "wait");
-
-  const downloaded = await downloadGithubFile(kind, path, remote, kind === "secondary");
+  setGithubFileStatus(statusKind, `⬇️ Nouvelle version GitHub détectée : téléchargement de <strong>${escapeHtml(basenameFromPath(path))}</strong>…`, "wait");
+  const downloaded = await downloadGithubFile(kind, path, remote);
   const meta = downloaded.record;
 
   if (kind === "primary") processPrimaryFileData(downloaded.arrayBuffer, meta.name, true, meta);
   else processSecondFileData(downloaded.arrayBuffer, meta.name, true, meta);
 
-  const countHtml = kind === "secondary" && meta.parsedRowCount != null
-    ? `<br>📊 Correspondances réellement lues : <strong>${meta.parsedRowCount}</strong>`
-    : "";
-  const apiHtml = kind === "secondary" ? `<br>🛡️ Source : <strong>API GitHub directe (anti-cache)</strong>` : "";
-
   setGithubFileStatus(statusKind,
-    `✅ Nouvelle version chargée depuis GitHub : <strong>${escapeHtml(meta.name)}</strong>${countHtml}${apiHtml}<br>📅 Dernière mise à jour : <strong>${escapeHtml(formatFileDate(meta.githubLastModified || meta.lastModified))}</strong>`,
+    `✅ Nouvelle version chargée depuis GitHub : <strong>${escapeHtml(meta.name)}</strong><br>📅 Dernière mise à jour : <strong>${escapeHtml(formatFileDate(meta.githubLastModified || meta.lastModified))}</strong>`,
     "ok");
-  return { changed:true, rowCount:meta.parsedRowCount };
+  return { changed:true };
 }
 
 let githubFilesSyncRunning = false;
 
-async function syncGithubFiles(forceDetect = false, forceDownload = false) {
+async function syncGithubFiles(forceDetect = false) {
   if (githubFilesSyncRunning) return;
   githubFilesSyncRunning = true;
 
   try {
     const config = await autoDetectGithubFilePaths(forceDetect);
     await Promise.all([
-      syncOneGithubFile("primary", config.primaryPath, false, forceDownload),
-      syncOneGithubFile("secondary", config.secondaryPath, false, forceDownload)
+      syncOneGithubFile("primary", config.primaryPath),
+      syncOneGithubFile("secondary", config.secondaryPath)
     ]);
   } catch (err) {
     console.warn("Synchronisation GitHub des fichiers impossible :", err);
@@ -3259,8 +3403,9 @@ async function syncGithubFiles(forceDetect = false, forceDownload = false) {
     const msg = escapeHtml(rawMsg);
 
     let extra = '';
-    if (rawMsg.includes('404')) {
-      extra = `<br>📦 Dépôt essayé : <strong>${escapeHtml(GITHUB_OWNER)}/${escapeHtml(GITHUB_REPO)}</strong><br>🌐 Pages : <strong>${escapeHtml(GITHUB_PAGES_BASE_PATH)}</strong>`;
+    if (rawMsg.includes('404') || rawMsg.includes('Aucune source GitHub valide')) {
+      const candidates = getGithubSourceCandidates().map(s => s.label).join(' | ');
+      extra = `<br>📦 Sources essayées : <strong>${escapeHtml(candidates)}</strong>`;
     }
 
     setGithubFileStatus(
@@ -3369,7 +3514,7 @@ document.getElementById("githubDetectBtn").addEventListener("click", async () =>
   try {
     const config = await autoDetectGithubFilePaths(true);
     fillGithubPathInputs(config);
-    await syncGithubFiles(false, true);
+    await syncGithubFiles(false);
   } catch (err) {
     alert("Détection GitHub impossible : " + (err.message || err));
   }
@@ -3383,10 +3528,10 @@ document.getElementById("githubSavePathsBtn").addEventListener("click", async ()
   };
   saveGithubFileConfig(config);
   fillGithubPathInputs(config);
-  await syncGithubFiles(false, true);
+  await syncGithubFiles(false);
 });
 
-document.getElementById("githubSyncNowBtn").addEventListener("click", () => syncGithubFiles(false, true));
+document.getElementById("githubSyncNowBtn").addEventListener("click", () => syncGithubFiles(false));
 
 
 function normalizeSearchText(value) {
@@ -3567,11 +3712,11 @@ function search(value) {
   if (!value) {
     resultDiv.innerHTML = "";
     countDiv.textContent = "";
-    return 0;
+    return;
   }
   if (rows.length === 0) {
     resultDiv.innerHTML = '<div class="empty">Chargez d\'abord un fichier ci-dessus.</div>';
-    return 0;
+    return;
   }
 
   const target = normalize(value);
@@ -3588,7 +3733,7 @@ function search(value) {
   if (matches.length === 0) {
     resultDiv.innerHTML = '<div class="notfound">❌ Aucun ASIN trouvé pour ce numéro de suivi.</div>';
     countDiv.textContent = "";
-    return 0;
+    return;
   }
 
   countDiv.innerHTML = `<span class="found">✅ ${matches.length} article(s) trouvé(s) pour ce colis (scan: ${value})</span>`;
@@ -3631,9 +3776,6 @@ function search(value) {
   // Seulement 1 produit => impression automatique si l'option est active.
   // Plusieurs produits => aucun départ automatique.
   maybeAutoPrintSingle(matches, value);
-
-  // V34 : la caméra peut savoir immédiatement si le code existe dans la base.
-  return matches.length;
 }
 
 let debounceTimer;
@@ -3670,46 +3812,9 @@ let html5QrCode = null;
 let lastScanValue = "";
 let lastScanTime = 0;
 let flashEnabled = false;
-let cameraScanLocked = false;
-
-function setCameraLiveUi(active) {
-  cameraZone.classList.toggle("camera-live-overlay", !!active);
-  document.body.classList.toggle("camera-live", !!active);
-}
-
-async function closeCameraAfterDatabaseMatch(decodedText, foundCount) {
-  if (cameraScanLocked) return;
-  cameraScanLocked = true;
-  try {
-    await stopScanner();
-
-    // Revenir automatiquement à la vue normale : le résultat est alors visible.
-    tabManual.classList.add("active");
-    tabCamera.classList.remove("active");
-    manualZone.style.display = "block";
-    cameraZone.style.display = "none";
-
-    const input = document.getElementById("scanInput");
-    if (input) input.value = decodedText;
-
-    const countDiv = document.getElementById("count");
-    if (countDiv) {
-      countDiv.innerHTML = `<span class="found">✅ ${foundCount} article(s) trouvé(s) — caméra fermée automatiquement</span>`;
-    }
-
-    setTimeout(() => {
-      const result = document.getElementById("result");
-      if (result) result.scrollIntoView({ behavior:"smooth", block:"start" });
-    }, 120);
-  } finally {
-    cameraScanLocked = false;
-  }
-}
 
 document.getElementById("startCam").addEventListener("click", async () => {
   const camStatus = document.getElementById("camStatus");
-  cameraScanLocked = false;
-  setCameraLiveUi(true);
   document.getElementById("cameraWrap").style.display = "block";
   document.getElementById("startCam").style.display = "none";
   document.getElementById("stopCam").style.display = "inline-block";
@@ -3717,13 +3822,8 @@ document.getElementById("startCam").addEventListener("click", async () => {
 
   html5QrCode = new Html5Qrcode("reader");
   const config = {
-    fps: 14,
-    qrbox: (viewfinderWidth, viewfinderHeight) => {
-      const width = Math.min(Math.floor(viewfinderWidth * 0.88), 520);
-      const height = Math.min(Math.max(150, Math.floor(width * 0.38)), Math.floor(viewfinderHeight * 0.42));
-      return { width, height };
-    },
-    aspectRatio: 1.777778,
+    fps: 10,
+    qrbox: { width: 280, height: 160 },
     formatsToSupport: [
       Html5QrcodeSupportedFormats.CODE_128,
       Html5QrcodeSupportedFormats.CODE_39,
@@ -3744,22 +3844,9 @@ document.getElementById("startCam").addEventListener("click", async () => {
         if (decodedText === lastScanValue && now - lastScanTime < 2000) return;
         lastScanValue = decodedText;
         lastScanTime = now;
-        if (cameraScanLocked) return;
-        camStatus.innerHTML = `📷 Code détecté : <strong>${escapeHtml(decodedText)}</strong> — vérification…`;
-        const foundCount = search(decodedText);
-
-        if (foundCount > 0) {
-          // V34 : trouvé dans Order History => fermeture immédiate de la caméra.
-          cameraScanLocked = true;
-          camStatus.innerHTML = `✅ Trouvé dans la base (${foundCount}) — fermeture de la caméra…`;
-          if (navigator.vibrate) navigator.vibrate([90, 50, 120]);
-          cameraScanLocked = false;
-          closeCameraAfterDatabaseMatch(decodedText, foundCount);
-        } else {
-          // Pas trouvé => on laisse la caméra ouverte pour scanner un autre code.
-          camStatus.innerHTML = `❌ <strong>${escapeHtml(decodedText)}</strong> absent de la base — caméra laissée ouverte.`;
-          if (navigator.vibrate) navigator.vibrate([45, 45, 45]);
-        }
+        camStatus.innerHTML = `📷 Code détecté: <strong>${decodedText}</strong>`;
+        search(decodedText);
+        if (navigator.vibrate) navigator.vibrate(150);
       },
       () => { /* ignore frames without a code */ }
     );
@@ -3778,10 +3865,6 @@ document.getElementById("startCam").addEventListener("click", async () => {
       flashBtn.style.display = "none";
     }
   } catch (err) {
-    setCameraLiveUi(false);
-    document.getElementById("cameraWrap").style.display = "none";
-    document.getElementById("startCam").style.display = "inline-block";
-    document.getElementById("stopCam").style.display = "none";
     camStatus.textContent = "❌ Impossible d'accéder à la caméra : " + err;
   }
 });
@@ -4023,23 +4106,17 @@ function downloadBarcodesPdf(matches, trackingValue) {
 }
 
 
-async function stopScanner() {
-  const scanner = html5QrCode;
-  html5QrCode = null;
-
-  if (scanner) {
-    try { await scanner.stop(); } catch (_) {}
-    try { scanner.clear(); } catch (_) {}
+function stopScanner() {
+  if (html5QrCode) {
+    html5QrCode.stop().then(() => {
+      html5QrCode.clear();
+      html5QrCode = null;
+    }).catch(() => {});
   }
-
   flashEnabled = false;
-  setCameraLiveUi(false);
-
   const flashBtn = document.getElementById("toggleFlash");
-  if (flashBtn) {
-    flashBtn.style.display = "none";
-    flashBtn.textContent = "🔦 Allumer le flash";
-  }
+  flashBtn.style.display = "none";
+  flashBtn.textContent = "🔦 Allumer le flash";
   document.getElementById("startCam").style.display = "inline-block";
   document.getElementById("stopCam").style.display = "none";
   document.getElementById("cameraWrap").style.display = "none";
@@ -5768,12 +5845,12 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 // =============================================================
-// V31 — MISE À JOUR / CACHE FIABLE
+// V33 — MISE À JOUR / CACHE FIABLE
 // - le navigateur vérifie toujours la dernière version de sw.js
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "34.0.0";
+const APP_VERSION = "33.0.0";
 try {
   const el = document.getElementById('appVersionText');
   if (el) el.textContent = `v${APP_VERSION}`;
@@ -5808,7 +5885,7 @@ async function installFreshServiceWorker() {
       location.reload();
     });
   } catch (err) {
-    console.warn("Service worker V31 non disponible :", err);
+    console.warn("Service worker V33 non disponible :", err);
   }
 }
 

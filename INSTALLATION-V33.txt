@@ -1,0 +1,45 @@
+V33 — FORMATS 40×20 COMPACT + 40×70 LONG
+
+À mettre sur GitHub :
+- index.html
+- sw.js
+
+Aucun changement Apps Script / Google Sheets.
+
+Nouveaux presets :
+- 40×20 mm — Compact
+- 40×30 mm — Standard
+- 50×30 mm — Large
+- 40×70 mm — Long
+- Autre taille
+
+40×20 COMPACT
+- suivi réduit mais lisible ;
+- code-barres optimisé en hauteur ;
+- vraie marge blanche latérale ;
+- ASIN + code en gras ;
+- description jusqu'à 2 lignes ;
+- moins de données Bluetooth qu'en 40×30, donc impression plus rapide.
+
+40×70 LONG
+- 40 mm de largeur × 70 mm de hauteur : compatible M110 ;
+- suivi plus grand ;
+- code-barres nettement plus haut ;
+- vraie marge blanche latérale ;
+- ASIN/code agrandis ;
+- description très lisible jusqu'à 6 lignes ;
+- pré-test Bluetooth dès 4 étiquettes ;
+- sous-lots limités automatiquement à 3 étiquettes maximum ;
+- pause de vidage tampon renforcée entre sous-lots.
+
+50×30
+- conserve la marge de sécurité du code-barres déjà validée.
+
+Les profils par imprimante V30+ mémorisent aussi les nouveaux formats.
+
+Après mise à jour :
+1. Ouvre ton site avec ?v=33
+2. Vérifie « Version actuelle : v33.0.0 »
+3. Teste 1 étiquette 40×20
+4. Teste 1 étiquette 40×70
+5. Envoie-moi une photo des deux rendus si tu veux que j'ajuste précisément les tailles de police/espacements.
