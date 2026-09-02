@@ -1,0 +1,37 @@
+V36 — CORRECTION 40×20 + 40×70 PAYSAGE
+================================================
+
+Base :
+- V35 construite elle-même depuis votre vraie V34 caméra plein écran.
+- Toutes les fonctions caméra V34/V35 restent présentes.
+
+CORRECTION 40×20
+Le premier rendu utilisait trop peu la hauteur.
+V36 :
+- code-barres plus haut ;
+- recherche de largeur de module plus fine (2.0 / 1.8 / 1.6 / etc.) pour remplir davantage la largeur ;
+- ASIN plus gros ;
+- code-barres texte plus gros ;
+- description jusqu'à 2 lignes ;
+- description placée plus bas pour supprimer le grand espace vide.
+
+CORRECTION 40×70
+Le contenu est maintenant imprimé DANS L'AUTRE SENS :
+1. le site dessine une étiquette logique 70×40 mm en paysage ;
+2. code-barres horizontal sur la longueur de 70 mm ;
+3. ASIN / code / description utilisent la largeur de 70 mm ;
+4. tout le raster est ensuite tourné de 90° ;
+5. la M110 imprime physiquement sur le rouleau 40 mm de large × 70 mm de long.
+
+Le support reste donc bien un rouleau 40×70, mais le contenu est en paysage.
+
+INSTALLATION
+Remplacer index.html dans scan-suivi.
+Ouvrir ensuite le site avec ?v=36.
+
+Aucun changement Apps Script / Google Sheets.
+
+TEST CONSEILLÉ
+- 1 étiquette 40×20
+- 1 étiquette 40×70
+Envoyer une photo des deux pour l'ajustement final si nécessaire.
