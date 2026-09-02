@@ -1,0 +1,42 @@
+V35 — BASE V34 + FORMATS 40×20 / 40×70
+=========================================
+
+IMPORTANT
+Cette V35 est construite DIRECTEMENT depuis votre V34 :
+PATCH_SCANNER_V34_CAMERA_PLEIN_ECRAN_AUTO_CLOSE.
+
+Donc elle conserve :
+- caméra mobile plein écran ;
+- boutons Flash/Fermer flottants ;
+- FPS caméra 14 ;
+- fermeture automatique de la caméra quand le suivi est trouvé ;
+- caméra qui reste ouverte si le suivi n'est pas trouvé ;
+- toutes les fonctions Bluetooth / GitHub / rangement déjà présentes dans la V34.
+
+AJOUTS V35
+
+40×20 — Compact
+- vrai preset 40 × 20 ;
+- code-barres moins haut pour tenir proprement ;
+- marges blanches latérales ;
+- ASIN + code en gras ;
+- description jusqu'à 2 lignes ;
+- transfert Bluetooth plus court qu'en 40×30.
+
+40×70 — Long
+- vrai preset 40 mm LARGE × 70 mm HAUT ;
+- grand code-barres ;
+- ASIN / code plus grands ;
+- description jusqu'à 6 lignes ;
+- marges blanches latérales ;
+- pré-test Bluetooth dès 4 étiquettes ;
+- sous-lots max. 3 pour réduire le risque de saturation ;
+- pause renforcée entre sous-lots.
+
+Les formats existants 40×30 et 50×30 sont conservés.
+
+INSTALLATION
+Remplacer uniquement index.html dans le dépôt scan-suivi.
+Puis ouvrir le site avec ?v=35.
+
+Aucun changement Apps Script / Google Sheets.
