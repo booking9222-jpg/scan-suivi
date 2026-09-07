@@ -1,0 +1,18 @@
+V40 — 40×20 : CODE-BARRES ALIGNÉ À DROITE
+
+Base : V39.
+
+Modification uniquement sur le format 40×20 :
+- le code-barres n'est plus centré + décalé ;
+- il est maintenant placé directement le plus à droite possible ;
+- marge de sécurité fixe à droite : 1,5 mm (~12 dots) ;
+- le code-barres ne peut donc pas toucher le bord physique ;
+- ASIN, code texte et titre restent centrés ;
+- taille du titre V39 conservée ;
+- 40×30 / 50×30 / 40×70 paysage inchangés ;
+- caméra, Bluetooth, GitHub, rangement inchangés.
+
+Installation :
+- remplacer index.html dans scan-suivi ;
+- ouvrir avec ?v=40 ;
+- imprimer une seule étiquette 40×20.
