@@ -2,11 +2,12 @@
 <html lang="fr"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="no-referrer">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="34.0.0">
-<title>Scanner Suivi → ASIN → M110 — V13 Catalogue + Photo + Sortie</title>
+<meta name="app-version" content="40.3.3">
+<title>Scanner Suivi → ASIN → M110 — V40.3.3 + VINE Tracking V3.3.7</title>
 <script src="./Dernier Fonctionnel_files/xlsx.full.min.js.télécharger"></script>
 <script src="./Dernier Fonctionnel_files/html5-qrcode.min.js.télécharger"></script>
 <script src="./Dernier Fonctionnel_files/JsBarcode.all.min.js.télécharger"></script>
@@ -608,7 +609,22 @@
 
 
 <div class="card">
-  <strong>1. Order History :</strong><br>
+  <strong>1. Order History — VINE Tracking Google Sheets (prioritaire)</strong>
+  <div class="mini-note" style="margin:7px 0 9px;line-height:1.45;">
+    Colle une seule fois la valeur <strong>ORDER_HISTORY_URL</strong> de l’onglet <strong>PARAMETRES</strong> de VINE Tracking. Ce lien utilise un jeton <strong>lecture seule</strong> distinct du scanner de réception.
+    Les suivis + ASIN + titres seront chargés directement depuis Google Sheets, sans fichier Order History.
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <input type="url" id="vtOrderHistoryScannerUrl" placeholder="https://script.google.com/macros/s/.../exec?mode=order_history&t=...&s=..." autocomplete="off" spellcheck="false" style="flex:1;min-width:260px;padding:10px;border:1px solid #bbb;border-radius:6px;">
+    <button class="btn" id="vtOrderHistoryLoad" type="button" style="background:#0b8043;">☁️ Charger / actualiser</button>
+    <button class="btn" id="vtOrderHistoryForget" type="button" style="background:#777;">Oublier</button>
+  </div>
+  <label style="display:flex;align-items:center;gap:7px;font-size:13px;margin-top:8px;">
+    <input type="checkbox" id="vtOrderHistoryAuto" checked> Charger automatiquement cette source à chaque ouverture
+  </label>
+  <div id="vtOrderHistoryStatus" class="github-file-status" style="margin-top:8px;">Source VINE Tracking non configurée.</div>
+  <hr style="border:0;border-top:1px solid #eee;margin:15px 0;">
+  <strong>Secours : fichier local / GitHub</strong><br>
   <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
   <div id="status">Aucun fichier chargé.</div>
   <div id="githubStatus1" class="github-file-status">☁️ GitHub : vérification automatique en attente…</div>
@@ -648,8 +664,8 @@
       <button class="btn" id="githubSyncNowBtn" type="button" style="background:#2e7d32;">🔄 Vérifier maintenant</button>
     </div>
     <div class="mini-note" style="margin-top:7px;">
-      GitHub est la source prioritaire. Si Internet est indisponible, la dernière copie enregistrée sur ce téléphone reste utilisée.
-      V32 : le fichier de correspondance est re-téléchargé directement via l’API GitHub lors d’une vérification forcée, puis son nombre de lignes A+B est contrôlé avant sauvegarde locale.
+      Avec une ORDER_HISTORY_URL VINE Tracking configurée, VINE Tracking est la source Order History prioritaire. GitHub reste automatiquement actualisé comme copie de secours ; hors ligne, la dernière copie VINE sûre enregistrée sur ce téléphone est essayée avant le secours GitHub/local.
+      Le fichier de correspondance ASIN → code-barres reste synchronisé depuis GitHub comme avant.
     </div>
   </details>
 </div>
@@ -3045,12 +3061,15 @@ function restoreAutoPrintSingleUi() {
 function maybeAutoPrintSingle(matches, trackingValue) {
   if (!isAutoPrintSingleEnabled() || !Array.isArray(matches) || matches.length !== 1) return;
 
-  // Sécurité : l'auto-impression ne part que sur un numéro de suivi complet/exact,
-  // jamais pendant qu'un numéro est encore en train d'être tapé.
-  const trackingNorm = normalize(trackingValue);
-  if (!rows.some(r => r.trackingNorm === trackingNorm)) return;
+  // V40.3.3 : utiliser la même comparaison exacte que search(). Les lignes VINE
+  // contiennent souvent AMZN_FR(FR...), UPS(...), etc.; trackingNorm seul ne peut
+  // donc pas être comparé directement au code brut scanné.
+  const inputTokens = extractTrackingTokens(trackingValue);
+  if (inputTokens.length !== 1) return;
+  if (!rows.some(r => trackingRowMatchesInput(r, trackingValue))) return;
 
-  const key = trackingNorm + "|" + normalize(matches[0].asin);
+  const trackingKey = inputTokens[0];
+  const key = trackingKey + "|" + normalize(matches[0].asin);
   const now = Date.now();
   // search() peut être déclenchée à la fois par le debounce et par Entrée :
   // cette garde évite donc deux impressions du même scan.
@@ -3551,7 +3570,8 @@ async function downloadGithubFile(kind, path, remoteMeta, forceApi = false) {
   };
 }
 
-async function syncOneGithubFile(kind, path, quiet = false, forceDownload = false) {
+async function syncOneGithubFile(kind, path, quiet = false, forceDownload = false, options = {}) {
+  const applyToRows = options.applyToRows !== false;
   const label = kind === "primary" ? "Order History" : "Correspondance";
   const key = kind === "primary" ? "orderHistory" : "correspondence";
   const statusKind = kind === "primary" ? "primary" : "secondary";
@@ -3581,7 +3601,7 @@ async function syncOneGithubFile(kind, path, quiet = false, forceDownload = fals
       lastModified:saved.lastModified,
       parsedRowCount: kind === "secondary" ? localCorrespondenceCount : null
     };
-    if (kind === "primary") processPrimaryFileData(saved.data, saved.name || basenameFromPath(path), true, meta);
+    if (kind === "primary") { if (applyToRows) processPrimaryFileData(saved.data, saved.name || basenameFromPath(path), true, meta); }
     else processSecondFileData(saved.data, saved.name || basenameFromPath(path), true, meta);
 
     const countHtml = kind === "secondary" && localCorrespondenceCount != null
@@ -3602,7 +3622,7 @@ async function syncOneGithubFile(kind, path, quiet = false, forceDownload = fals
   const downloaded = await downloadGithubFile(kind, path, remote, kind === "secondary");
   const meta = downloaded.record;
 
-  if (kind === "primary") processPrimaryFileData(downloaded.arrayBuffer, meta.name, true, meta);
+  if (kind === "primary") { if (applyToRows) processPrimaryFileData(downloaded.arrayBuffer, meta.name, true, meta); }
   else processSecondFileData(downloaded.arrayBuffer, meta.name, true, meta);
 
   const countHtml = kind === "secondary" && meta.parsedRowCount != null
@@ -3624,10 +3644,14 @@ async function syncGithubFiles(forceDetect = false, forceDownload = false) {
 
   try {
     const config = await autoDetectGithubFilePaths(forceDetect);
+    const vinePrimary = hasVineOrderHistorySource();
     await Promise.all([
-      syncOneGithubFile("primary", config.primaryPath, false, forceDownload),
+      // Toujours maintenir le backup GitHub à jour. Si VINE est configuré,
+      // le téléchargement est mis en cache sans écraser les lignes VINE actives.
+      syncOneGithubFile("primary", config.primaryPath, false, forceDownload, { applyToRows: !vinePrimary }),
       syncOneGithubFile("secondary", config.secondaryPath, false, forceDownload)
     ]);
+    if (vinePrimary) setGithubFileStatus("primary", "☁️ VINE Tracking prioritaire — backup GitHub Order History vérifié et conservé en secours.", "ok");
   } catch (err) {
     console.warn("Synchronisation GitHub des fichiers impossible :", err);
     const rawMsg = String(err.message || err);
@@ -3653,14 +3677,389 @@ async function syncGithubFiles(forceDetect = false, forceDownload = false) {
   }
 }
 
+const VT_ORDER_SOURCE_URL_KEY = "vine-order-history-google-scanner-url-v1";
+const VT_ORDER_SOURCE_AUTO_KEY = "vine-order-history-google-auto-v1";
+const VT_ORDER_SNAPSHOT_DB_KEY = "orderHistoryVine";
+const VT_ORDER_REFRESH_MS = 120000;
+const VT_ORDER_FALLBACK_RETRY_MS = 30000;
+const VT_ORDER_PRESCAN_TIMEOUT_MS = 12000;
+const VT_ORDER_BACKGROUND_TIMEOUT_MS = 15000;
+const VT_ORDER_MANUAL_TIMEOUT_MS = 30000;
+let vtOrderHistoryLoadInFlight = null;
+let vtOrderHistoryLastLiveAt = 0;
+let vtOrderHistoryLastReadyAt = 0;
+let vtOrderHistoryLastReadySource = '';
+let vtOrderHistoryRefreshTimer = null;
+let vtOrderHistoryPendingSearch = null;
+
+async function deleteSavedFileRecord(key) {
+  try {
+    const db = await openFileDb();
+    await new Promise((resolve,reject)=>{
+      const tx=db.transaction(FILE_STORE_NAME,"readwrite");
+      tx.objectStore(FILE_STORE_NAME).delete(key);
+      tx.oncomplete=resolve; tx.onerror=()=>reject(tx.error);
+    });
+    db.close();
+    return true;
+  } catch (_) { return false; }
+}
+
+function hasVineOrderHistorySource() {
+  try { return !!String(localStorage.getItem(VT_ORDER_SOURCE_URL_KEY) || "").trim(); }
+  catch (_) { return false; }
+}
+
+function buildVineOrderHistoryEndpoint(rawUrl) {
+  const raw = String(rawUrl || "").trim();
+  if (!raw) throw new Error("ORDER_HISTORY_URL manquante.");
+  const u = new URL(raw);
+  if (u.protocol !== "https:" || !/script\.google\.com$/i.test(u.hostname) || !/\/macros\/s\/[^/]+\/exec$/i.test(u.pathname)) throw new Error("URL Apps Script /exec invalide.");
+  if (String(u.searchParams.get("mode") || "") !== "order_history") throw new Error("Colle ORDER_HISTORY_URL (mode=order_history), pas SCANNER_URL.");
+  const token = u.searchParams.get("t"), sourceId = u.searchParams.get("s");
+  if (!token) throw new Error("Le jeton t= est absent. Recopie ORDER_HISTORY_URL depuis PARAMETRES.");
+  if (!sourceId) throw new Error("La clé source s= est absente. Relance setupVineTracking() puis recopie ORDER_HISTORY_URL.");
+  u.search = "";
+  u.searchParams.set("mode", "order_history");
+  u.searchParams.set("t", token);
+  u.searchParams.set("s", sourceId);
+  return u;
+}
+
+function vineOrderHistorySourceInfo(rawUrl) {
+  const u = buildVineOrderHistoryEndpoint(rawUrl);
+  const sourceId = String(u.searchParams.get("s") || "");
+  return { sourceId, fingerprint:`${u.hostname}${u.pathname}|${sourceId}` };
+}
+
+function validateVineOrderHistoryPayload(payload, rawUrl) {
+  if (!payload || payload.ok !== true) throw new Error(payload && payload.error ? payload.error : "Réponse VINE Tracking invalide.");
+  if (!Array.isArray(payload.rows)) throw new Error("Réponse VINE Tracking sans tableau rows.");
+  const info = vineOrderHistorySourceInfo(rawUrl);
+  if (!payload.sourceId || String(payload.sourceId) !== info.sourceId) throw new Error("La réponse VINE provient d'un autre Google Sheet/source.");
+  if (payload.rows.length > 150000) throw new Error("Réponse VINE anormalement volumineuse.");
+  for (const r of payload.rows) if (!(Array.isArray(r) && r.length >= 2)) throw new Error("Ligne VINE invalide.");
+  return info;
+}
+
+async function saveVineOrderHistorySnapshot(payload, rawUrl) {
+  const info = validateVineOrderHistoryPayload(payload, rawUrl);
+  try {
+    const db = await openFileDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(FILE_STORE_NAME, "readwrite");
+      tx.objectStore(FILE_STORE_NAME).put({source:"vine",savedAt:Date.now(),generatedAt:payload.generatedAt||"",sourceId:info.sourceId,sourceFingerprint:info.fingerprint,payload}, VT_ORDER_SNAPSHOT_DB_KEY);
+      tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+    });
+    db.close(); return true;
+  } catch (err) { console.warn("Impossible de mémoriser le snapshot VINE Tracking :", err); return false; }
+}
+
+async function getVineOrderHistorySnapshot(rawUrl) {
+  try {
+    const rec = await getSavedFile(VT_ORDER_SNAPSHOT_DB_KEY);
+    if (!rec || !rec.payload) return null;
+    const info = vineOrderHistorySourceInfo(rawUrl);
+    if (rec.sourceFingerprint !== info.fingerprint || rec.sourceId !== info.sourceId) return null;
+    validateVineOrderHistoryPayload(rec.payload, rawUrl);
+    return rec;
+  } catch (_) { return null; }
+}
+
+async function activateGithubOrderHistoryFallback(reason = "") {
+  const status = document.getElementById("vtOrderHistoryStatus");
+  try {
+    const config = await autoDetectGithubFilePaths(false);
+    if (config && config.primaryPath && navigator.onLine !== false) {
+      await syncOneGithubFile("primary", config.primaryPath, true, false, { applyToRows: true });
+      if (status) status.textContent = `⚠️ VINE indisponible${reason ? ` (${reason})` : ""} — backup GitHub actif.`;
+      return true;
+    }
+  } catch (err) { console.warn("Fallback GitHub live indisponible :", err); }
+  try {
+    const saved = await getSavedFile("orderHistory");
+    if (saved && saved.data) {
+      processPrimaryFileData(saved.data, saved.name || "Order History secours", true, saved);
+      if (status) status.textContent = `⚠️ VINE indisponible${reason ? ` (${reason})` : ""} — copie locale GitHub active.`;
+      return true;
+    }
+  } catch (err) { console.warn("Fallback Order History local indisponible :", err); }
+  if (status) status.textContent = `❌ VINE indisponible${reason ? ` (${reason})` : ""} et aucun backup Order History utilisable.`;
+  return false;
+}
+
+function vineOrderHistoryJsonp(rawUrl, timeoutMs = VT_ORDER_MANUAL_TIMEOUT_MS) {
+  const endpoint = buildVineOrderHistoryEndpoint(rawUrl);
+  return new Promise((resolve, reject) => {
+    const cb = `__vt_oh_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    let done = false;
+    const script = document.createElement("script");
+    const finish = (err, data) => {
+      if (done) return; done = true; clearTimeout(timer);
+      try { delete window[cb]; } catch (_) { window[cb] = undefined; }
+      try { script.remove(); } catch (_) {}
+      if (err) reject(err); else resolve(data);
+    };
+    window[cb] = data => finish(null, data);
+    endpoint.searchParams.set("callback", cb);
+    script.async = true; script.src = endpoint.toString();
+    script.onerror = () => finish(new Error("Impossible de joindre VINE Tracking Google Sheets."));
+    const timer = setTimeout(() => finish(new Error("Délai dépassé pendant le chargement Google Sheets.")), timeoutMs);
+    document.head.appendChild(script);
+  });
+}
+
+function applyVineOrderHistoryPayload(payload, options = {}) {
+  if (!payload || payload.ok !== true || !Array.isArray(payload.rows)) throw new Error(payload && payload.error ? payload.error : "Réponse VINE Tracking invalide.");
+  const srcRows = payload.rows;
+  rows = srcRows.map(r => {
+    const a = Array.isArray(r) ? r : [r.trackingRaw, r.asin, r.productName, r.photoUrl];
+    return {trackingNorm:normalize(a[0]),trackingTokens:extractTrackingTokens(a[0]),trackingRaw:String(a[0]||""),asin:String(a[1]||""),productName:String(a[2]||""),photoUrl:String(a[3]||"").trim()};
+  }).filter(r => r.trackingRaw && r.asin);
+  const built = payload.generatedAt ? new Date(payload.generatedAt) : null;
+  const builtText = built && !Number.isNaN(built.getTime()) ? ` · synchro ${built.toLocaleString("fr-FR")}` : "";
+  const excludedKnown = payload.excludedExact === true && Number.isFinite(Number(payload.excluded));
+  const excluded = excludedKnown ? Number(payload.excluded) : null;
+  const excludedText = excludedKnown ? (excluded ? ` · ${excluded} article(s) incertain(s) volontairement exclus` : " · 0 article incertain exclu") : " · nombre d'exclus non recalculé";
+  const cacheNote = options.cached ? " · 💾 dernière copie VINE mémorisée" : "";
+  document.getElementById("status").innerHTML = `✅ <strong>${rows.length}</strong> lignes chargées depuis <strong>VINE Tracking Google Sheets</strong>${builtText}${cacheNote}. Colonne suivi: <strong>Carrier Name &amp; Tracking Number</strong>, ASIN: <strong>ASIN</strong>, Produit: <strong>Product Name</strong>${excludedText}.`;
+  document.getElementById("vtOrderHistoryStatus").innerHTML = `✅ Source Google ${options.cached ? "mémorisée" : "active"} — <strong>${rows.length}</strong> ligne(s) sûres${excludedText}.`;
+  setGithubFileStatus("primary", "☁️ Order History fourni directement par VINE Tracking — GitHub conservé en secours.", "ok");
+  document.getElementById("scanInput").value = "";
+  searchByProductTitle(document.getElementById("productTitleSearch").value);
+  return rows.length;
+}
+
+async function loadVineOrderHistorySource(options = {}) {
+  if (vtOrderHistoryLoadInFlight) return vtOrderHistoryLoadInFlight;
+  const input = document.getElementById("vtOrderHistoryScannerUrl"), status = document.getElementById("vtOrderHistoryStatus");
+  const raw = String(input && input.value || "").trim();
+  if (!raw) { if (!options.silent) status.textContent = "⚠️ Colle d’abord ORDER_HISTORY_URL depuis PARAMETRES."; return 0; }
+  try { buildVineOrderHistoryEndpoint(raw); localStorage.setItem(VT_ORDER_SOURCE_URL_KEY, raw); }
+  catch (err) {
+    const msg=String(err&&err.message||err); status.textContent="❌ "+msg;
+    const fallbackOk = await activateGithubOrderHistoryFallback(msg);
+    if (fallbackOk) { vtOrderHistoryLastReadyAt=Date.now(); vtOrderHistoryLastReadySource='fallback'; }
+    return rows.length;
+  }
+  status.textContent = "☁️ Chargement depuis VINE Tracking…";
+  vtOrderHistoryLoadInFlight = (async () => {
+    try {
+      const payload = await vineOrderHistoryJsonp(raw, Number(options.timeoutMs || VT_ORDER_MANUAL_TIMEOUT_MS));
+      validateVineOrderHistoryPayload(payload, raw); // validation AVANT cache
+      const count = applyVineOrderHistoryPayload(payload);
+      await saveVineOrderHistorySnapshot(payload, raw);
+      vtOrderHistoryLastLiveAt = Date.now();
+      vtOrderHistoryLastReadyAt = vtOrderHistoryLastLiveAt;
+      vtOrderHistoryLastReadySource = 'live';
+      return count;
+    } catch (err) {
+      const msg=String(err&&err.message||err); console.warn("Source VINE Tracking live indisponible :",err);
+      const cached = await getVineOrderHistorySnapshot(raw);
+      if (cached && cached.payload) {
+        const count=applyVineOrderHistoryPayload(cached.payload,{cached:true});
+        status.textContent=`⚠️ Google momentanément indisponible — dernière copie VINE locale de cette source utilisée (${count} ligne(s)).`;
+        vtOrderHistoryLastReadyAt = Date.now();
+        vtOrderHistoryLastReadySource = 'cache';
+        return count;
+      }
+      const fallbackOk = await activateGithubOrderHistoryFallback(msg);
+      if (fallbackOk) {
+        vtOrderHistoryLastReadyAt = Date.now();
+        vtOrderHistoryLastReadySource = 'fallback';
+      }
+      if (!options.silent) document.getElementById("status").textContent="⚠️ Source VINE indisponible — fallback GitHub/local activé automatiquement.";
+      return rows.length;
+    } finally { vtOrderHistoryLoadInFlight=null; }
+  })();
+  return vtOrderHistoryLoadInFlight;
+}
+
+function vineOrderHistoryNeedsBlockingRefresh() {
+  if (!hasVineOrderHistorySource() || navigator.onLine === false) return false;
+  const now = Date.now();
+  if (vtOrderHistoryLastReadyAt) {
+    const maxAge = vtOrderHistoryLastReadySource === 'live' ? VT_ORDER_REFRESH_MS : VT_ORDER_FALLBACK_RETRY_MS;
+    if (now - vtOrderHistoryLastReadyAt <= maxAge) return false;
+  }
+  return !vtOrderHistoryLastLiveAt || now - vtOrderHistoryLastLiveAt > VT_ORDER_REFRESH_MS;
+}
+
+function maybeRefreshVineOrderHistoryBeforeScan(value, origin = 'manual') {
+  if (!vineOrderHistoryNeedsBlockingRefresh() && !vtOrderHistoryLoadInFlight) return false;
+
+  // Ne jamais exploiter silencieusement un mapping VINE vieux de >2 min lorsque
+  // le réseau est disponible. Le scan courant est rejoué après la tentative de
+  // rafraîchissement (live, cache VINE ou fallback GitHub selon le résultat).
+  const pending = { value: String(value || ''), origin: String(origin || 'manual'), requestedAt: Date.now() };
+  vtOrderHistoryPendingSearch = pending;
+  const resultDiv = document.getElementById('result');
+  const countDiv = document.getElementById('count');
+  if (resultDiv) resultDiv.innerHTML = '<div class="empty">☁️ Actualisation VINE Tracking avant utilisation de ce scan…</div>';
+  if (countDiv) countDiv.textContent = '';
+  const camStatus = document.getElementById('camStatus');
+  if (origin === 'camera' && camStatus) camStatus.textContent = '☁️ Actualisation de la base VINE avant vérification…';
+
+  const loadPromise = vtOrderHistoryLoadInFlight || loadVineOrderHistorySource({silent:true, timeoutMs:VT_ORDER_PRESCAN_TIMEOUT_MS});
+  Promise.resolve(loadPromise).catch(()=>0).finally(() => {
+    const cur = vtOrderHistoryPendingSearch;
+    if (!cur || cur.requestedAt !== pending.requestedAt || cur.value !== pending.value) return;
+    vtOrderHistoryPendingSearch = null;
+    const foundCount = search(cur.value, { skipRefresh: true, origin: cur.origin });
+    if (cur.origin === 'camera') {
+      const status = document.getElementById('camStatus');
+      if (foundCount > 0) {
+        if (status) status.textContent = `✅ Trouvé dans la base (${foundCount}) — fermeture de la caméra…`;
+        if (navigator.vibrate) navigator.vibrate([90,50,120]);
+        cameraScanLocked = false;
+        closeCameraAfterDatabaseMatch(cur.value, foundCount);
+      } else {
+        cameraScanLocked = false;
+        if (status) status.innerHTML = `❌ <strong>${escapeHtml(cur.value)}</strong> absent de la base après actualisation — caméra laissée ouverte.`;
+      }
+    }
+  });
+  return true;
+}
+
+function startVineOrderHistoryAutoRefresh() {
+  if (vtOrderHistoryRefreshTimer) clearInterval(vtOrderHistoryRefreshTimer);
+  vtOrderHistoryRefreshTimer=setInterval(()=>{
+    const auto=document.getElementById("vtOrderHistoryAuto");
+    if (auto?.checked && document.visibilityState !== "hidden" && hasVineOrderHistorySource()) loadVineOrderHistorySource({silent:true, timeoutMs:VT_ORDER_BACKGROUND_TIMEOUT_MS}).catch(()=>{});
+  },VT_ORDER_REFRESH_MS);
+}
+
+function initVineOrderHistorySource() {
+  const input=document.getElementById("vtOrderHistoryScannerUrl"),auto=document.getElementById("vtOrderHistoryAuto"),load=document.getElementById("vtOrderHistoryLoad"),forget=document.getElementById("vtOrderHistoryForget");
+  if(!input||!auto||!load||!forget)return;
+  try{input.value=localStorage.getItem(VT_ORDER_SOURCE_URL_KEY)||"";}catch(_){}
+  try{auto.checked=localStorage.getItem(VT_ORDER_SOURCE_AUTO_KEY)!=="0";}catch(_){auto.checked=true;}
+  auto.addEventListener("change",()=>{try{localStorage.setItem(VT_ORDER_SOURCE_AUTO_KEY,auto.checked?"1":"0");}catch(_){}});
+  load.addEventListener("click",()=>loadVineOrderHistorySource());
+  forget.addEventListener("click",async()=>{
+    try{localStorage.removeItem(VT_ORDER_SOURCE_URL_KEY);}catch(_){}
+    await deleteSavedFileRecord(VT_ORDER_SNAPSHOT_DB_KEY);
+    input.value=""; vtOrderHistoryLastLiveAt=0; vtOrderHistoryLastReadyAt=0; vtOrderHistoryLastReadySource=""; vtOrderHistoryPendingSearch=null;
+    document.getElementById("vtOrderHistoryStatus").textContent="Source VINE Tracking oubliée. Activation du backup GitHub/local…";
+    activateGithubOrderHistoryFallback("source oubliée");
+  });
+  if(input.value&&auto.checked)loadVineOrderHistorySource({silent:true, timeoutMs:VT_ORDER_BACKGROUND_TIMEOUT_MS});
+  startVineOrderHistoryAutoRefresh();
+}
+
+function normalizeTrackingLookup(s) {
+  return String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "").trim();
+}
+
+function extractTrackingTokens(value) {
+  const raw = String(value || "").trim().toUpperCase();
+  if (!raw) return [];
+  const out = [];
+  const add = v => {
+    const n = normalizeTrackingLookup(v);
+    if (n.length >= 6 && n.length <= 40 && !out.includes(n)) out.push(n);
+  };
+  // Format historique Amazon : AMZN_FR(FR123...), UPS(1Z...), etc.
+  const re = /\(([A-Z0-9][A-Z0-9._\- ]{5,45})\)/g;
+  let m;
+  while ((m = re.exec(raw))) add(m[1]);
+  // Une cellule contenant directement le tracking est également acceptée.
+  if (/^[A-Z0-9._\- ]{6,45}$/.test(raw)) add(raw);
+  return out;
+}
+
+function trackingRowMatchesInput(row, value) {
+  const inputTokens = extractTrackingTokens(value);
+  if (!inputTokens.length) {
+    const n = normalizeTrackingLookup(value);
+    if (n) inputTokens.push(n);
+  }
+  const rowTokens = Array.isArray(row && row.trackingTokens) && row.trackingTokens.length
+    ? row.trackingTokens
+    : extractTrackingTokens(row && row.trackingRaw);
+  if (!rowTokens.length) {
+    const n = normalizeTrackingLookup(row && row.trackingRaw);
+    if (n) rowTokens.push(n);
+  }
+  return inputTokens.some(t => rowTokens.includes(t));
+}
+
 function normalize(s) {
   return String(s || "").toUpperCase().replace(/[\s\-_.]/g, "").trim();
 }
 
+function normalizeFallbackOrderId(value) {
+  const v = String(value || "").trim();
+  return /^\d{3}-\d{7}-\d{7}$/.test(v) ? v : "";
+}
+
+function isFallbackTrackingTokenPlausible(token) {
+  const t = normalizeTrackingLookup(token);
+  if (t.length < 6 || t.length > 40) return false;
+  const blocked = new Set([
+    "NOTAVAILABLE","UNAVAILABLE","INDISPONIBLE","UNKNOWN","INCONNU",
+    "NONE","NULL","NOSUIVI","PASDESUIVI","TRACKING","SUIVI"
+  ]);
+  if (blocked.has(t)) return false;
+  if (/^(\d)\1{5,}$/.test(t)) return false;
+  return true;
+}
+
+function quarantineFallbackOrderHistoryRows(inputRows) {
+  const rowsIn = Array.isArray(inputRows) ? inputRows : [];
+  const tokenOrders = new Map();
+  const prepared = rowsIn.map(row => {
+    const trackingTokens = Array.isArray(row && row.trackingTokens)
+      ? row.trackingTokens.map(normalizeTrackingLookup).filter(Boolean)
+      : extractTrackingTokens(row && row.trackingRaw);
+    const orderId = normalizeFallbackOrderId(row && row.orderId);
+    const uniqueToken = trackingTokens.length === 1 && isFallbackTrackingTokenPlausible(trackingTokens[0])
+      ? trackingTokens[0] : "";
+    if (uniqueToken && orderId) {
+      if (!tokenOrders.has(uniqueToken)) tokenOrders.set(uniqueToken, new Set());
+      tokenOrders.get(uniqueToken).add(orderId);
+    }
+    return { ...row, trackingTokens, orderId, _fallbackUniqueToken: uniqueToken };
+  });
+
+  const collisionTokens = new Set([...tokenOrders.entries()].filter(([, orders]) => orders.size > 1).map(([t]) => t));
+  const safeRows = [];
+  const quarantinedRows = [];
+  const reasonCounts = { multiTracking:0, invalidTracking:0, missingOrderId:0, crossOrderCollision:0 };
+
+  for (const row of prepared) {
+    let reason = "";
+    if (!Array.isArray(row.trackingTokens) || row.trackingTokens.length !== 1) {
+      reason = "multi_tracking"; reasonCounts.multiTracking++;
+    } else if (!row._fallbackUniqueToken) {
+      reason = "invalid_tracking"; reasonCounts.invalidTracking++;
+    } else if (!row.orderId) {
+      reason = "missing_order_id"; reasonCounts.missingOrderId++;
+    } else if (collisionTokens.has(row._fallbackUniqueToken)) {
+      reason = "cross_order_tracking"; reasonCounts.crossOrderCollision++;
+    }
+    const clean = { ...row };
+    delete clean._fallbackUniqueToken;
+    if (reason) quarantinedRows.push({ ...clean, fallbackQuarantineReason: reason });
+    else safeRows.push(clean);
+  }
+
+  return {
+    safeRows,
+    quarantinedRows,
+    collisionTokens: [...collisionTokens],
+    collisionTokenCount: collisionTokens.size,
+    reasonCounts,
+    totalRows: rowsIn.length
+  };
+}
+
 function detectColumns(headers) {
-  const norm = headers.map(h => String(h || "").toLowerCase());
+  const norm = headers.map(h => String(h || "").toLowerCase().trim());
   let tCol = norm.findIndex(h => h.includes("tracking") || h.includes("suivi") || h.includes("carrier"));
   let aCol = norm.findIndex(h => h === "asin" || h.includes("asin"));
+  let oCol = norm.findIndex(h => h === "order id" || h === "orderid" || h === "order number" || h === "order number id" || h.includes("numéro de commande") || h.includes("numero de commande"));
   let pCol = norm.findIndex(h =>
     h.includes("product name") ||
     h.includes("nom du produit") ||
@@ -3679,7 +4078,7 @@ function detectColumns(headers) {
     h === "image" ||
     h === "photo"
   );
-  return { tCol, aCol, pCol, imgCol };
+  return { tCol, aCol, oCol, pCol, imgCol };
 }
 
 function processPrimaryFileData(arrayBuffer, fileName = "", restored = false, meta = {}) {
@@ -3695,7 +4094,7 @@ function processPrimaryFileData(arrayBuffer, fileName = "", restored = false, me
   }
 
   const headers = json[0];
-  const { tCol, aCol, pCol, imgCol } = detectColumns(headers);
+  const { tCol, aCol, oCol, pCol, imgCol } = detectColumns(headers);
 
   if (tCol === -1 || aCol === -1) {
     document.getElementById("status").textContent =
@@ -3703,20 +4102,30 @@ function processPrimaryFileData(arrayBuffer, fileName = "", restored = false, me
     return;
   }
 
-  rows = json.slice(1).map(r => ({
+  const rawRows = json.slice(1).map(r => ({
     trackingNorm: normalize(r[tCol]),
+    trackingTokens: extractTrackingTokens(r[tCol]),
     trackingRaw: r[tCol],
+    orderId: oCol !== -1 ? r[oCol] : "",
     asin: r[aCol],
     productName: pCol !== -1 ? r[pCol] : "",
     photoUrl: imgCol !== -1 ? String(r[imgCol] || "").trim() : "",
   })).filter(r => r.trackingRaw);
 
-  const pColLabel = pCol !== -1 ? `, colonne Produit: "<strong>${headers[pCol]}</strong>"` : ' — ⚠️ colonne "Product Name" non trouvée';
-  const imgColLabel = imgCol !== -1 ? `, colonne Photo: "<strong>${headers[imgCol]}</strong>"` : ' — photo non fournie par ce fichier';
+  const quarantine = quarantineFallbackOrderHistoryRows(rawRows);
+  rows = quarantine.safeRows;
+
+  const pColLabel = pCol !== -1 ? `, colonne Produit: "<strong>${escapeHtml(headers[pCol])}</strong>"` : ' — ⚠️ colonne "Product Name" non trouvée';
+  const imgColLabel = imgCol !== -1 ? `, colonne Photo: "<strong>${escapeHtml(headers[imgCol])}</strong>"` : ' — photo non fournie par ce fichier';
+  const orderColLabel = oCol !== -1 ? `, colonne Commande: "<strong>${escapeHtml(headers[oCol])}</strong>"` : ' — ⚠️ colonne "Order ID" absente : lignes de secours mises en quarantaine';
+  const q = quarantine.reasonCounts;
+  const quarantineText = quarantine.quarantinedRows.length
+    ? ` — 🛡️ ${quarantine.quarantinedRows.length} ligne(s) de secours exclue(s) (${quarantine.collisionTokenCount} tracking(s) réutilisé(s) entre commandes ; multi=${q.multiTracking}, tracking invalide=${q.invalidTracking}, OrderID absent=${q.missingOrderId}, collision=${q.crossOrderCollision})`
+    : ' — 🛡️ aucune collision de tracking inter-commandes détectée';
   const restoredText = restored ? " — 💾 restauré automatiquement" : "";
   const fileText = fileName ? ` <span style="color:#555;">(${escapeHtml(fileName)})</span>` : "";
   document.getElementById("status").innerHTML =
-    `✅ ${rows.length} lignes chargées${fileText}. Colonne suivi: "<strong>${headers[tCol]}</strong>", colonne ASIN: "<strong>${headers[aCol]}</strong>"${pColLabel}${imgColLabel}.${restoredText}${fileMetaHtml(meta)}`;
+    `✅ ${rows.length} lignes sûres chargées${fileText}. Colonne suivi: "<strong>${escapeHtml(headers[tCol])}</strong>", colonne ASIN: "<strong>${escapeHtml(headers[aCol])}</strong>"${orderColLabel}${pColLabel}${imgColLabel}.${quarantineText}${restoredText}${fileMetaHtml(meta)}`;
   document.getElementById("scanInput").value = "";
   searchByProductTitle(document.getElementById("productTitleSearch").value);
 }
@@ -3779,6 +4188,22 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function checkRequiredStaticLibraries() {
+  const missing = [];
+  if (typeof XLSX === "undefined") missing.push("XLSX");
+  if (typeof Html5Qrcode === "undefined") missing.push("Html5Qrcode");
+  if (typeof JsBarcode === "undefined") missing.push("JsBarcode");
+  if (!window.jspdf || typeof window.jspdf.jsPDF !== "function") missing.push("jsPDF");
+  if (missing.length) {
+    const msg = `❌ Bibliothèque(s) statique(s) manquante(s) : ${missing.join(", ")}. Vérifie le dossier Dernier Fonctionnel_files sur GitHub.`;
+    const status = document.getElementById("status"); if (status) status.textContent = msg;
+    const bar = document.getElementById("globalSyncBar"); if (bar) { bar.textContent = msg; bar.className = "global-sync-bar err"; }
+    console.error(msg);
+    return false;
+  }
+  return true;
 }
 
 function searchByProductTitle(value) {
@@ -3891,9 +4316,12 @@ async function handleSecondFile(file, shouldSave = true) {
 
 
 async function restoreSavedFiles() {
-  const [primary, secondary] = await Promise.all([
+  let rawVineUrl = "";
+  try { rawVineUrl = localStorage.getItem(VT_ORDER_SOURCE_URL_KEY) || ""; } catch (_) {}
+  const [primary, secondary, vineSnapshot] = await Promise.all([
     getSavedFile("orderHistory"),
-    getSavedFile("correspondence")
+    getSavedFile("correspondence"),
+    rawVineUrl ? getVineOrderHistorySnapshot(rawVineUrl) : Promise.resolve(null)
   ]);
 
   if (primary && primary.data) {
@@ -3910,6 +4338,13 @@ async function restoreSavedFiles() {
     } catch (err) {
       document.getElementById("status2").textContent = "⚠️ 2e fichier mémorisé trouvé mais impossible à restaurer.";
     }
+  }
+
+  // Si une source VINE est configurée, la dernière copie VINE sûre est plus
+  // récente/prioritaire que l'ancien Order History GitHub restauré ci-dessus.
+  if (rawVineUrl && vineSnapshot && vineSnapshot.payload) {
+    try { validateVineOrderHistoryPayload(vineSnapshot.payload, rawVineUrl); applyVineOrderHistoryPayload(vineSnapshot.payload, { cached: true }); }
+    catch (err) { console.warn("Snapshot VINE mémorisé refusé :", err); }
   }
 }
 
@@ -3930,17 +4365,23 @@ function findSecondMatchByAsin(asin) {
   const tokenizedExact = secondRows.find(x => extractAsinLikeTokens(x.asinRaw).includes(asinNorm));
   if (tokenizedExact) return tokenizedExact;
 
-  const contains = secondRows.find(x => x.asinNorm.includes(asinNorm));
-  if (contains) return contains;
-
+  // V40.3.3 / V3.3.3 : ne jamais choisir une correspondance par simple sous-chaîne.
+  // Une étiquette M110 est une action physique ; l'ASIN doit donc être exact.
   return null;
 }
 
-function search(value) {
+function search(value, options = {}) {
   const resultDiv = document.getElementById("result");
   const countDiv = document.getElementById("count");
   if (!value) {
     resultDiv.innerHTML = "";
+    countDiv.textContent = "";
+    return 0;
+  }
+  if (!options.skipRefresh && maybeRefreshVineOrderHistoryBeforeScan(value, options.origin || 'manual')) return -1;
+  const inputTokens = extractTrackingTokens(value);
+  if (inputTokens.length > 1) {
+    resultDiv.innerHTML = '<div class="notfound">❌ Plusieurs numéros de suivi distincts détectés. Scanne un seul carton à la fois.</div>';
     countDiv.textContent = "";
     return 0;
   }
@@ -3949,8 +4390,7 @@ function search(value) {
     return 0;
   }
 
-  const target = normalize(value);
-  const matches = rows.filter(r => r.trackingNorm === target || r.trackingNorm.includes(target) || target.includes(r.trackingNorm)).map(r => {
+  const matches = rows.filter(r => trackingRowMatchesInput(r, value)).map(r => {
     const second = findSecondMatchByAsin(r.asin);
     return {
       ...r,
@@ -3966,7 +4406,7 @@ function search(value) {
     return 0;
   }
 
-  countDiv.innerHTML = `<span class="found">✅ ${matches.length} article(s) trouvé(s) pour ce colis (scan: ${value})</span>`;
+  countDiv.innerHTML = `<span class="found">✅ ${matches.length} article(s) trouvé(s) pour ce colis (scan: ${escapeHtml(value)})</span>`;
 
   // V13 : dès l’ouverture, le catalogue commun est alimenté pour le téléphone du rangeur.
   queueCloudCatalogMatches(matches);
@@ -4121,8 +4561,16 @@ document.getElementById("startCam").addEventListener("click", async () => {
         lastScanTime = now;
         if (cameraScanLocked) return;
         camStatus.innerHTML = `📷 Code détecté : <strong>${escapeHtml(decodedText)}</strong> — vérification…`;
-        const foundCount = search(decodedText);
+        const foundCount = search(decodedText, { origin: 'camera' });
 
+        if (foundCount < 0) {
+          // La base VINE est en cours de rafraîchissement. Le même code sera
+          // rejoué automatiquement avec les nouvelles données. Le gestionnaire
+          // de replay est seul responsable du déverrouillage afin d'éviter une
+          // course pendant stopScanner()/fermeture de caméra.
+          cameraScanLocked = true;
+          return;
+        }
         if (foundCount > 0) {
           // V34 : trouvé dans Order History => fermeture immédiate de la caméra.
           cameraScanLocked = true;
@@ -5015,7 +5463,7 @@ function lookupAsinsFromLoadedFiles(raw) {
   // Permet aussi de retrouver les anciens rangements V8/V9 par n° de suivi,
   // même si la colonne "N° suivi" n'existait pas encore dans Google Sheets.
   for (const r of rows || []) {
-    if (qNorm && normalize(r.trackingRaw).includes(qNorm)) found.add(String(r.asin || "").trim());
+    if (qNorm && trackingRowMatchesInput(r, raw)) found.add(String(r.asin || "").trim());
     else if (qTitle && qTitle.length >= 3) {
       const title = typeof normalizeSearchText === "function" ? normalizeSearchText(r.productName || "") : String(r.productName || "").toLowerCase();
       if (title.includes(qTitle)) found.add(String(r.asin || "").trim());
@@ -6080,10 +6528,13 @@ function initStorageMode() {
 
 // Restaure automatiquement les deux fichiers Excel mémorisés après une actualisation.
 window.addEventListener("DOMContentLoaded", () => {
+  checkRequiredStaticLibraries();
   updateGithubRepoInfo();
   fillGithubPathInputs();
   restoreSavedFiles().finally(() => {
-    // Affiche immédiatement la copie locale, puis vérifie GitHub en arrière-plan.
+    // V3.3.3 : VINE Tracking devient la source Order History prioritaire.
+    // GitHub reste la source automatique du fichier de correspondance et le secours Order History.
+    initVineOrderHistorySource();
     setTimeout(() => syncGithubFiles(false), 450);
   });
   restoreLabelSizeUi();
@@ -6143,12 +6594,12 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 // =============================================================
-// V40 — MISE À JOUR / CACHE FIABLE
+// V40.3.3 — MISE À JOUR / CACHE FIABLE
 // - le navigateur vérifie toujours la dernière version de sw.js
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "40.0.0";
+const APP_VERSION = "40.3.3";
 try {
   const el = document.getElementById('appVersionText');
   if (el) el.textContent = `v${APP_VERSION}`;
@@ -6183,7 +6634,7 @@ async function installFreshServiceWorker() {
       location.reload();
     });
   } catch (err) {
-    console.warn("Service worker V31 non disponible :", err);
+    console.warn("Service worker V40.3.3 non disponible :", err);
   }
 }
 
