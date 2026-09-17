@@ -6,8 +6,8 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="40.3.3">
-<title>Scanner Suivi → ASIN → M110 — V40.3.3 + VINE Tracking V3.3.7</title>
+<meta name="app-version" content="40.3.4">
+<title>Scanner Suivi → ASIN → M110 — V40.3.4 + VINE Tracking V3.3.7</title>
 <script src="./Dernier Fonctionnel_files/xlsx.full.min.js.télécharger"></script>
 <script src="./Dernier Fonctionnel_files/html5-qrcode.min.js.télécharger"></script>
 <script src="./Dernier Fonctionnel_files/JsBarcode.all.min.js.télécharger"></script>
@@ -3677,6 +3677,7 @@ async function syncGithubFiles(forceDetect = false, forceDownload = false) {
   }
 }
 
+const VT_EXPECTED_SERVER_BUILD = "3.3.7.5";
 const VT_ORDER_SOURCE_URL_KEY = "vine-order-history-google-scanner-url-v1";
 const VT_ORDER_SOURCE_AUTO_KEY = "vine-order-history-google-auto-v1";
 const VT_ORDER_SNAPSHOT_DB_KEY = "orderHistoryVine";
@@ -3737,6 +3738,7 @@ function validateVineOrderHistoryPayload(payload, rawUrl) {
   if (!Array.isArray(payload.rows)) throw new Error("Réponse VINE Tracking sans tableau rows.");
   const info = vineOrderHistorySourceInfo(rawUrl);
   if (!payload.sourceId || String(payload.sourceId) !== info.sourceId) throw new Error("La réponse VINE provient d'un autre Google Sheet/source.");
+  if (String(payload.build || '') !== VT_EXPECTED_SERVER_BUILD) throw new Error(`Code.gs obsolète : serveur ${payload.build || 'ancien/inconnu'}, Scanner attendu ${VT_EXPECTED_SERVER_BUILD}. Mets à jour puis redéploie le même /exec.`);
   if (payload.rows.length > 150000) throw new Error("Réponse VINE anormalement volumineuse.");
   for (const r of payload.rows) if (!(Array.isArray(r) && r.length >= 2)) throw new Error("Ligne VINE invalide.");
   return info;
@@ -3809,6 +3811,41 @@ function vineOrderHistoryJsonp(rawUrl, timeoutMs = VT_ORDER_MANUAL_TIMEOUT_MS) {
   });
 }
 
+
+async function fetchVineOrderHistoryWithRetry(rawUrl, totalTimeoutMs = VT_ORDER_MANUAL_TIMEOUT_MS) {
+  const total = Math.max(4000, Number(totalTimeoutMs || VT_ORDER_MANUAL_TIMEOUT_MS));
+  const deadline = Date.now() + total;
+  const retryDelays = [0, 900, 1800];
+  let lastError = null;
+
+  for (let attempt = 0; attempt < retryDelays.length; attempt++) {
+    const delay = retryDelays[attempt];
+    if (delay) {
+      const remainingBeforeWait = deadline - Date.now();
+      if (remainingBeforeWait <= delay + 800) break;
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+    const remaining = deadline - Date.now();
+    if (remaining <= 800) break;
+    const perAttempt = Math.max(800, Math.min(10000, remaining));
+
+    try {
+      const payload = await vineOrderHistoryJsonp(rawUrl, perAttempt);
+      if (payload && payload.ok === true) return payload;
+      const err = new Error(payload && payload.error ? payload.error : "Réponse VINE Tracking invalide.");
+      err.retryable = !!(payload && payload.retryable);
+      err.code = String(payload && payload.code || "");
+      lastError = err;
+      if (!err.retryable) throw err;
+    } catch (err) {
+      lastError = err;
+      const retryable = !!(err && err.retryable) || /SOURCE_BUSY|synchronisation|délai dépassé|impossible de joindre/i.test(String(err && err.message || err));
+      if (!retryable) throw err;
+    }
+  }
+  throw lastError || new Error("VINE Tracking Google Sheets indisponible après plusieurs tentatives.");
+}
+
 function applyVineOrderHistoryPayload(payload, options = {}) {
   if (!payload || payload.ok !== true || !Array.isArray(payload.rows)) throw new Error(payload && payload.error ? payload.error : "Réponse VINE Tracking invalide.");
   const srcRows = payload.rows;
@@ -3820,10 +3857,14 @@ function applyVineOrderHistoryPayload(payload, options = {}) {
   const builtText = built && !Number.isNaN(built.getTime()) ? ` · synchro ${built.toLocaleString("fr-FR")}` : "";
   const excludedKnown = payload.excludedExact === true && Number.isFinite(Number(payload.excluded));
   const excluded = excludedKnown ? Number(payload.excluded) : null;
-  const excludedText = excludedKnown ? (excluded ? ` · ${excluded} article(s) incertain(s) volontairement exclus` : " · 0 article incertain exclu") : " · nombre d'exclus non recalculé";
+  const excludedText = excludedKnown ? (excluded ? ` · ${excluded} article(s) non exporté(s) vers M110 (sans suivi ou association insuffisamment sûre)` : " · 0 article exclu") : " · nombre d'exclus non recalculé";
+  const shared = Number(payload.sharedPhysicalTrackings || 0);
+  const conflicts = Number(payload.conflictTrackings || 0);
+  const sharedText = shared > 0 ? ` · ${shared} tracking(s) de colis partagé(s) multi-commandes accepté(s)` : "";
+  const conflictText = conflicts > 0 ? ` · ${conflicts} tracking(s) réellement ambigu(s) en quarantaine` : "";
   const cacheNote = options.cached ? " · 💾 dernière copie VINE mémorisée" : "";
-  document.getElementById("status").innerHTML = `✅ <strong>${rows.length}</strong> lignes chargées depuis <strong>VINE Tracking Google Sheets</strong>${builtText}${cacheNote}. Colonne suivi: <strong>Carrier Name &amp; Tracking Number</strong>, ASIN: <strong>ASIN</strong>, Produit: <strong>Product Name</strong>${excludedText}.`;
-  document.getElementById("vtOrderHistoryStatus").innerHTML = `✅ Source Google ${options.cached ? "mémorisée" : "active"} — <strong>${rows.length}</strong> ligne(s) sûres${excludedText}.`;
+  document.getElementById("status").innerHTML = `✅ <strong>${rows.length}</strong> lignes chargées depuis <strong>VINE Tracking Google Sheets</strong>${builtText}${cacheNote}. Colonne suivi: <strong>Carrier Name &amp; Tracking Number</strong>, ASIN: <strong>ASIN</strong>, Produit: <strong>Product Name</strong>${excludedText}${sharedText}${conflictText}.`;
+  document.getElementById("vtOrderHistoryStatus").innerHTML = `✅ Source Google ${options.cached ? "mémorisée" : "active"} — <strong>${rows.length}</strong> ligne(s) sûres${excludedText}${sharedText}${conflictText}.`;
   setGithubFileStatus("primary", "☁️ Order History fourni directement par VINE Tracking — GitHub conservé en secours.", "ok");
   document.getElementById("scanInput").value = "";
   searchByProductTitle(document.getElementById("productTitleSearch").value);
@@ -3845,7 +3886,7 @@ async function loadVineOrderHistorySource(options = {}) {
   status.textContent = "☁️ Chargement depuis VINE Tracking…";
   vtOrderHistoryLoadInFlight = (async () => {
     try {
-      const payload = await vineOrderHistoryJsonp(raw, Number(options.timeoutMs || VT_ORDER_MANUAL_TIMEOUT_MS));
+      const payload = await fetchVineOrderHistoryWithRetry(raw, Number(options.timeoutMs || VT_ORDER_MANUAL_TIMEOUT_MS));
       validateVineOrderHistoryPayload(payload, raw); // validation AVANT cache
       const count = applyVineOrderHistoryPayload(payload);
       await saveVineOrderHistorySnapshot(payload, raw);
@@ -3855,20 +3896,44 @@ async function loadVineOrderHistorySource(options = {}) {
       return count;
     } catch (err) {
       const msg=String(err&&err.message||err); console.warn("Source VINE Tracking live indisponible :",err);
+      const currentCount = rows.length;
       const cached = await getVineOrderHistorySnapshot(raw);
-      if (cached && cached.payload) {
+      const cachedCount = cached && cached.payload && Array.isArray(cached.payload.rows) ? cached.payload.rows.length : 0;
+
+      // Ne jamais remplacer une base déjà exploitable par un ancien snapshot
+      // VINE vide à cause d'un simple verrou/bref incident Apps Script.
+      if (cached && cached.payload && cachedCount > 0) {
         const count=applyVineOrderHistoryPayload(cached.payload,{cached:true});
-        status.textContent=`⚠️ Google momentanément indisponible — dernière copie VINE locale de cette source utilisée (${count} ligne(s)).`;
+        status.textContent=`⚠️ Google momentanément indisponible — dernière copie VINE locale sûre utilisée (${count} ligne(s)). Nouvelle tentative automatique sous peu.`;
         vtOrderHistoryLastReadyAt = Date.now();
         vtOrderHistoryLastReadySource = 'cache';
         return count;
       }
+      if (currentCount > 0) {
+        status.textContent=`⚠️ Google momentanément indisponible — base déjà chargée conservée (${currentCount} ligne(s)). Nouvelle tentative automatique sous peu.`;
+        vtOrderHistoryLastReadyAt = Date.now();
+        vtOrderHistoryLastReadySource = 'cache';
+        return currentCount;
+      }
+
       const fallbackOk = await activateGithubOrderHistoryFallback(msg);
-      if (fallbackOk) {
+      if (fallbackOk && rows.length > 0) {
         vtOrderHistoryLastReadyAt = Date.now();
         vtOrderHistoryLastReadySource = 'fallback';
+        if (!options.silent) document.getElementById("status").textContent="⚠️ Source VINE indisponible — fallback GitHub/local activé automatiquement.";
+        return rows.length;
       }
-      if (!options.silent) document.getElementById("status").textContent="⚠️ Source VINE indisponible — fallback GitHub/local activé automatiquement.";
+
+      // Dernier recours : un snapshot VINE vide reste affichable, mais seulement
+      // après échec du live ET du fallback. Cela évite le faux état « 0 ligne »
+      // observé pendant une synchronisation Google en cours.
+      if (cached && cached.payload) {
+        const count=applyVineOrderHistoryPayload(cached.payload,{cached:true});
+        status.textContent=`⚠️ Google indisponible et aucun backup exploitable — dernière copie VINE vide conservée (${count} ligne(s)).`;
+        vtOrderHistoryLastReadyAt = Date.now();
+        vtOrderHistoryLastReadySource = 'cache';
+        return count;
+      }
       return rows.length;
     } finally { vtOrderHistoryLoadInFlight=null; }
   })();
@@ -6594,12 +6659,12 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 // =============================================================
-// V40.3.3 — MISE À JOUR / CACHE FIABLE
+// V40.3.4 — MISE À JOUR / CACHE FIABLE
 // - le navigateur vérifie toujours la dernière version de sw.js
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "40.3.3";
+const APP_VERSION = "40.3.4";
 try {
   const el = document.getElementById('appVersionText');
   if (el) el.textContent = `v${APP_VERSION}`;
@@ -6634,7 +6699,7 @@ async function installFreshServiceWorker() {
       location.reload();
     });
   } catch (err) {
-    console.warn("Service worker V40.3.3 non disponible :", err);
+    console.warn("Service worker V40.3.4 non disponible :", err);
   }
 }
 
