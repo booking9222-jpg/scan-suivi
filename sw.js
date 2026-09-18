@@ -1,5 +1,5 @@
-/* Scanner Suivi M110 — Service Worker V40.3.10 */
-const CACHE_NAME = 'vine-m110-v40.3.10';
+/* Scanner Suivi M110 — Service Worker V40.3.11 */
+const CACHE_NAME = 'vine-m110-v40.3.11';
 const PAGE_PATH = './Scanner-Suivi-M110-v12.html';
 const STATIC_ASSETS = [
   PAGE_PATH,
@@ -85,7 +85,7 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Finalisation V40.3.10 : seuls les fichiers statiques explicitement connus
+  // Finalisation V40.3.11 : seuls les fichiers statiques explicitement connus
   // peuvent être servis depuis le cache. Toute autre ressource same-origin reste
   // réseau pur afin qu'un futur JSON/API ajouté au dépôt ne puisse jamais être figé.
   if (STATIC_PATHS.has(url.pathname)) {
