@@ -6,8 +6,8 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="40.3.8">
-<title>Scanner Suivi → ASIN → M110 — V40.3.8 + VINE Tracking V3.3.7</title>
+<meta name="app-version" content="40.3.9">
+<title>Scanner Suivi → ASIN → M110 — V40.3.9 + VINE Tracking V3.3.7</title>
 <script src="./Dernier Fonctionnel_files/xlsx.full.min.js.télécharger"></script>
 <script src="./Dernier Fonctionnel_files/html5-qrcode.min.js.télécharger"></script>
 <script src="./Dernier Fonctionnel_files/JsBarcode.all.min.js.télécharger"></script>
@@ -3677,7 +3677,7 @@ async function syncGithubFiles(forceDetect = false, forceDownload = false) {
   }
 }
 
-const VT_EXPECTED_SERVER_BUILD = "3.3.7.9";
+const VT_EXPECTED_SERVER_BUILD = "3.3.7.10";
 const VT_ORDER_SOURCE_URL_KEY = "vine-order-history-google-scanner-url-v1";
 const VT_ORDER_SOURCE_AUTO_KEY = "vine-order-history-google-auto-v1";
 const VT_ORDER_SNAPSHOT_DB_KEY = "orderHistoryVine";
@@ -6659,12 +6659,12 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 // =============================================================
-// V40.3.8 — compatibilité serveur V3.3.7.9, logique M110 inchangée
+// V40.3.9 — compatibilité serveur V3.3.7.10, logique M110 inchangée
 // - le navigateur vérifie toujours la dernière version de sw.js
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "40.3.8";
+const APP_VERSION = "40.3.9";
 try {
   const el = document.getElementById('appVersionText');
   if (el) el.textContent = `v${APP_VERSION}`;
@@ -6699,7 +6699,7 @@ async function installFreshServiceWorker() {
       location.reload();
     });
   } catch (err) {
-    console.warn("Service worker V40.3.8 non disponible :", err);
+    console.warn("Service worker V40.3.9 non disponible :", err);
   }
 }
 
