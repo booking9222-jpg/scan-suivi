@@ -6,8 +6,8 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="40.3.19">
-<title>Scanner Suivi → ASIN → M110 — V40.3.19 + VINE Tracking V3.3.7</title>
+<meta name="app-version" content="40.3.20">
+<title>Scanner Suivi → ASIN → M110 — V40.3.20 + VINE Tracking V3.3.7</title>
 <script src="./Dernier Fonctionnel_files/xlsx.full.min.js.télécharger"></script>
 <script src="./Dernier Fonctionnel_files/html5-qrcode.min.js.télécharger"></script>
 <script src="./Dernier Fonctionnel_files/JsBarcode.all.min.js.télécharger"></script>
@@ -626,8 +626,12 @@
     <summary style="cursor:pointer;font-size:13px;font-weight:bold;">☁️ Relais Cloudflare (facultatif si le VPN bloque script.google.com)</summary>
     <div style="display:grid;grid-template-columns:1fr;gap:6px;margin-top:7px;">
       <input type="url" id="vtOrderRelayUrl" placeholder="https://...workers.dev/order-history" autocomplete="off" spellcheck="false" style="padding:9px;border:1px solid #bbb;border-radius:6px;">
-      <input type="password" id="vtOrderRelayToken" placeholder="VT_RELAY_TOKEN" autocomplete="off" spellcheck="false" style="padding:9px;border:1px solid #bbb;border-radius:6px;">
-      <div class="mini-note">Google direct reste prioritaire. Le relais n’est essayé qu’en cas d’erreur réseau / délai dépassé.</div>
+      <input type="password" id="vtOrderRelayToken" placeholder="VT_ORDER_RELAY_TOKEN" autocomplete="off" spellcheck="false" style="padding:9px;border:1px solid #bbb;border-radius:6px;">
+      <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;">
+        <button class="btn" id="vtOrderRelayTest" type="button" style="background:#1565c0;padding:8px 12px;">🧪 Tester le relais</button>
+        <span id="vtOrderRelayStatus" class="mini-note" style="margin:0;">Relais non testé.</span>
+      </div>
+      <div class="mini-note">Google direct reste prioritaire. Le relais n’est essayé qu’en cas d’erreur réseau / délai dépassé. Utilise le secret <strong>VT_ORDER_RELAY_TOKEN</strong>, distinct du token d’écriture des téléphones.</div>
     </div>
   </details>
   <div id="vtOrderHistoryStatus" class="github-file-status" style="margin-top:8px;">Source VINE Tracking non configurée.</div>
@@ -3811,6 +3815,52 @@ function buildVineOrderHistoryRelayEndpoint(rawUrl) {
   u.search=""; u.searchParams.set("t",direct.searchParams.get("t")||""); u.searchParams.set("s",direct.searchParams.get("s")||"");
   return {url:u.toString(),token:relayToken};
 }
+function vineOrderHistoryRelayErrorLabel(err) {
+  const code=String(err&&err.code||'').trim().toUpperCase();
+  const msg=String(err&&err.message||err||'').trim();
+  if (code==='RELAY_AUTH' || /RELAY_AUTH/i.test(msg)) return 'RELAY_AUTH — token Cloudflare incorrect ou VT_ORDER_RELAY_TOKEN absent';
+  if (code==='ORDER_AUTH' || /ORDER_AUTH/i.test(msg)) return 'ORDER_AUTH — ORDER_HISTORY_URL / jeton t= refusé par Apps Script';
+  if (code==='UPSTREAM_CONFIG' || /UPSTREAM_CONFIG/i.test(msg)) return 'UPSTREAM_CONFIG — VT_UPSTREAM_URL du Worker est incorrect';
+  if (code==='UPSTREAM_HTTP' || /UPSTREAM_HTTP/i.test(msg)) return `UPSTREAM_HTTP — Apps Script a refusé la requête${msg ? ` (${msg})` : ''}`;
+  if (/délai dépassé|timeout|abort/i.test(msg)) return 'TIMEOUT — le relais ou Apps Script n’a pas répondu à temps';
+  if (/failed to fetch|network|load failed|connection/i.test(msg)) return 'NETWORK — impossible de joindre le relais Cloudflare';
+  return code ? `${code}${msg && msg!==code ? ` — ${msg}` : ''}` : (msg || 'Erreur relais inconnue');
+}
+function persistVineOrderRelayInputs() {
+  const relayUrl=document.getElementById('vtOrderRelayUrl');
+  const relayToken=document.getElementById('vtOrderRelayToken');
+  try {
+    if(relayUrl) localStorage.setItem(VT_ORDER_RELAY_URL_KEY,String(relayUrl.value||'').trim());
+    if(relayToken) localStorage.setItem(VT_ORDER_RELAY_TOKEN_KEY,String(relayToken.value||'').trim());
+  } catch (_) {}
+}
+function setVineOrderRelayStatus(message, kind='info') {
+  const el=document.getElementById('vtOrderRelayStatus'); if(!el)return;
+  const colors={ok:'#1b5e20',error:'#b00020',warn:'#8a5700',info:'#455a64'};
+  el.style.color=colors[kind]||colors.info;
+  el.textContent=String(message||'');
+}
+async function testVineOrderHistoryRelay() {
+  const input=document.getElementById('vtOrderHistoryScannerUrl');
+  const raw=String(input&&input.value||'').trim();
+  persistVineOrderRelayInputs();
+  if(!raw){ setVineOrderRelayStatus('❌ ORDER_HISTORY_URL manquante.','error'); return false; }
+  try { buildVineOrderHistoryEndpoint(raw); buildVineOrderHistoryRelayEndpoint(raw); }
+  catch(err){ setVineOrderRelayStatus(`❌ ${vineOrderHistoryRelayErrorLabel(err)}`,'error'); return false; }
+  setVineOrderRelayStatus('⏳ Test Cloudflare → Apps Script…','info');
+  try {
+    const payload=await vineOrderHistoryRelayFetch(raw,12000);
+    validateVineOrderHistoryPayload(payload,raw);
+    const n=Array.isArray(payload.rows)?payload.rows.length:0;
+    const build=String(payload.build||payload.serverBuild||payload.version||'').trim();
+    setVineOrderRelayStatus(`✅ Relais OK${build?` · serveur ${build}`:''} · ${n} ligne(s)`,'ok');
+    return true;
+  } catch(err) {
+    setVineOrderRelayStatus(`❌ ${vineOrderHistoryRelayErrorLabel(err)}`,'error');
+    return false;
+  }
+}
+
 async function vineOrderHistoryRelayFetch(rawUrl, timeoutMs = VT_ORDER_MANUAL_TIMEOUT_MS) {
   const relay=buildVineOrderHistoryRelayEndpoint(rawUrl); if(!relay) throw new Error("Relais Cloudflare non configuré.");
   const controller=new AbortController(); const timer=setTimeout(()=>controller.abort(),Math.max(1000,Number(timeoutMs||VT_ORDER_MANUAL_TIMEOUT_MS)));
@@ -3819,7 +3869,7 @@ async function vineOrderHistoryRelayFetch(rawUrl, timeoutMs = VT_ORDER_MANUAL_TI
     const text=await res.text(); let payload=null; try{payload=JSON.parse(text||"{}");}catch{throw new Error("Réponse relais Cloudflare non JSON.");}
     if(!res.ok || payload?.ok!==true){ const e=new Error(payload?.error||`Relais HTTP ${res.status}`); e.retryable=!!payload?.retryable; e.code=String(payload?.code||""); throw e; }
     payload.__transport="relay"; return payload;
-  } catch(e) { if(e?.name==="AbortError") throw new Error("Délai dépassé via relais Cloudflare."); throw e; }
+  } catch(e) { if(e?.name==="AbortError") { const x=new Error("Délai dépassé via relais Cloudflare."); x.code="RELAY_TIMEOUT"; x.retryable=true; throw x; } throw e; }
   finally { clearTimeout(timer); }
 }
 function vineOrderRelayConfigured() { try{return !!String(localStorage.getItem(VT_ORDER_RELAY_URL_KEY)||"").trim() && !!String(localStorage.getItem(VT_ORDER_RELAY_TOKEN_KEY)||"").trim();}catch(_){return false;} }
@@ -3881,7 +3931,7 @@ async function fetchVineOrderHistoryWithRetry(rawUrl, totalTimeoutMs = VT_ORDER_
   const directNetwork=/délai dépassé|impossible de joindre|network|failed to fetch|connection|load failed|err_connection/i.test(directMsg);
   if (vineOrderRelayConfigured() && directNetwork) {
     try { return await vineOrderHistoryRelayFetch(rawUrl, Math.max(5000,Math.min(15000,total))); }
-    catch(relayErr){ throw new Error(`${directMsg || "Google direct indisponible"} ; relais Cloudflare: ${relayErr.message}`); }
+    catch(relayErr){ const e=new Error(`${directMsg || "Google direct indisponible"} ; relais Cloudflare: ${vineOrderHistoryRelayErrorLabel(relayErr)}`); e.code=String(relayErr&&relayErr.code||"RELAY_FAILED"); e.retryable=!!(relayErr&&relayErr.retryable); e.relayError=relayErr; throw e; }
   }
   throw lastError || new Error("VINE Tracking Google Sheets indisponible après plusieurs tentatives.");
 }
@@ -3943,15 +3993,16 @@ async function loadVineOrderHistorySource(options = {}) {
 
       // Ne jamais remplacer une base déjà exploitable par un ancien snapshot
       // VINE vide à cause d'un simple verrou/bref incident Apps Script.
+      const detailedFailure = vineOrderHistoryRelayConfigured() ? vineOrderHistoryRelayErrorLabel(err) : msg;
       if (cached && cached.payload && cachedCount > 0) {
         const count=applyVineOrderHistoryPayload(cached.payload,{cached:true});
-        status.textContent=`⚠️ Google momentanément indisponible — dernière copie VINE locale sûre utilisée (${count} ligne(s)). Nouvelle tentative automatique sous peu.`;
+        status.textContent=`⚠️ Google / relais indisponible — ${detailedFailure} — dernière copie VINE locale sûre utilisée (${count} ligne(s)). Nouvelle tentative automatique sous peu.`;
         vtOrderHistoryLastReadyAt = Date.now();
         vtOrderHistoryLastReadySource = 'cache';
         return count;
       }
       if (currentCount > 0) {
-        status.textContent=`⚠️ Google momentanément indisponible — base déjà chargée conservée (${currentCount} ligne(s)). Nouvelle tentative automatique sous peu.`;
+        status.textContent=`⚠️ Google / relais indisponible — ${detailedFailure} — base déjà chargée conservée (${currentCount} ligne(s)). Nouvelle tentative automatique sous peu.`;
         vtOrderHistoryLastReadyAt = Date.now();
         vtOrderHistoryLastReadySource = 'cache';
         return currentCount;
@@ -4038,15 +4089,18 @@ function startVineOrderHistoryAutoRefresh() {
 
 function initVineOrderHistorySource() {
   const input=document.getElementById("vtOrderHistoryScannerUrl"),auto=document.getElementById("vtOrderHistoryAuto"),load=document.getElementById("vtOrderHistoryLoad"),forget=document.getElementById("vtOrderHistoryForget");
-  const relayUrl=document.getElementById("vtOrderRelayUrl"),relayToken=document.getElementById("vtOrderRelayToken");
+  const relayUrl=document.getElementById("vtOrderRelayUrl"),relayToken=document.getElementById("vtOrderRelayToken"),relayTest=document.getElementById("vtOrderRelayTest");
   if(!input||!auto||!load||!forget)return;
   try{input.value=localStorage.getItem(VT_ORDER_SOURCE_URL_KEY)||"";}catch(_){}
   try{auto.checked=localStorage.getItem(VT_ORDER_SOURCE_AUTO_KEY)!=="0";}catch(_){auto.checked=true;}
   try{if(relayUrl)relayUrl.value=localStorage.getItem(VT_ORDER_RELAY_URL_KEY)||"";if(relayToken)relayToken.value=localStorage.getItem(VT_ORDER_RELAY_TOKEN_KEY)||"";}catch(_){}
-  relayUrl?.addEventListener("change",()=>{try{localStorage.setItem(VT_ORDER_RELAY_URL_KEY,String(relayUrl.value||"").trim());}catch(_){}});
-  relayToken?.addEventListener("change",()=>{try{localStorage.setItem(VT_ORDER_RELAY_TOKEN_KEY,String(relayToken.value||"").trim());}catch(_){}});
+  relayUrl?.addEventListener("change",persistVineOrderRelayInputs);
+  relayToken?.addEventListener("change",persistVineOrderRelayInputs);
+  relayUrl?.addEventListener("input",persistVineOrderRelayInputs);
+  relayToken?.addEventListener("input",persistVineOrderRelayInputs);
   auto.addEventListener("change",()=>{try{localStorage.setItem(VT_ORDER_SOURCE_AUTO_KEY,auto.checked?"1":"0");}catch(_){}});
-  load.addEventListener("click",()=>loadVineOrderHistorySource());
+  load.addEventListener("click",()=>{ persistVineOrderRelayInputs(); loadVineOrderHistorySource(); });
+  relayTest?.addEventListener("click",()=>testVineOrderHistoryRelay());
   forget.addEventListener("click",async()=>{
     try{localStorage.removeItem(VT_ORDER_SOURCE_URL_KEY);}catch(_){}
     await deleteSavedFileRecord(VT_ORDER_SNAPSHOT_DB_KEY);
@@ -6704,12 +6758,12 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 // =============================================================
-// V40.3.19 — compatibilité serveur V3.3.7.20, logique M110 inchangée
+// V40.3.20 — diagnostic relais Cloudflare M110 + bouton de test
 // - le navigateur vérifie toujours la dernière version de sw.js
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "40.3.19";
+const APP_VERSION = "40.3.20";
 try {
   const el = document.getElementById('appVersionText');
   if (el) el.textContent = `v${APP_VERSION}`;
@@ -6744,7 +6798,7 @@ async function installFreshServiceWorker() {
       location.reload();
     });
   } catch (err) {
-    console.warn("Service worker V40.3.19 non disponible :", err);
+    console.warn("Service worker V40.3.20 non disponible :", err);
   }
 }
 
