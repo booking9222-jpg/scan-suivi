@@ -6,8 +6,8 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="40.3.22">
-<title>Scanner Suivi → ASIN → M110 — V40.3.22 + VINE Tracking V3.3.7</title>
+<meta name="app-version" content="40.3.23">
+<title>Scanner Suivi → ASIN → M110 — V40.3.23 + VINE Tracking V3.3.7</title>
 <script src="./Dernier Fonctionnel_files/xlsx.full.min.js.télécharger"></script>
 <script src="./Dernier Fonctionnel_files/html5-qrcode.min.js.télécharger"></script>
 <script src="./Dernier Fonctionnel_files/JsBarcode.all.min.js.télécharger"></script>
@@ -478,6 +478,18 @@
 <div id="globalSyncBar" class="global-sync-bar">☁️ Google Sheets non configuré — stockage local.</div>
 
 <div id="openingMode">
+<div class="card" id="scanStatistics">
+  <strong>📊 Statistiques des colis ouverts</strong>
+  <p class="mini-note">Sur ce téléphone · Colis reconnus, comptés une seule fois. Produits = ASIN distincts par colis, pas les quantités physiques. Un même ASIN dans deux colis compte deux fois.</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0;">
+    <label>Date <input type="date" id="scanStatsDate" style="padding:8px;max-width:100%;"></label>
+    <button type="button" class="btn" id="scanStatsToday">Aujourd’hui</button>
+    <button type="button" class="btn" id="scanStatsExport">Exporter les statistiques</button>
+  </div>
+  <table style="width:100%;"><thead><tr><th>Période</th><th>Colis</th><th>Produits</th></tr></thead><tbody id="scanStatsBody"><tr><td colspan="3">Lecture des statistiques…</td></tr></tbody></table>
+  <p class="mini-note" id="scanStatsNotice" aria-live="polite"></p>
+  <div class="mini-note">Semaine du lundi au dimanche. Choisis une date pour consulter les périodes précédentes. Les rescans ne sont pas ajoutés ; chaque colis reste à la date de son premier scan. Les statistiques ne sont pas partagées entre téléphones.</div>
+</div>
 
 <div class="card printer-card" id="m110Card">
   <strong>🖨️ Phomemo M110 — impression Bluetooth directe</strong>
@@ -4523,6 +4535,104 @@ function findSecondMatchByAsin(asin) {
   return null;
 }
 
+// Statistiques d'ouverture : journal persistant, indépendant des fichiers source.
+function scanStatsDay(at = new Date()) {
+  return new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Paris',year:'numeric',month:'2-digit',day:'2-digit'}).format(at);
+}
+function scanStatsPeriods(day) {
+  const d=new Date(day+'T12:00:00Z');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !Number.isFinite(d.getTime())) throw new Error('Date invalide');
+  const monday=new Date(d); monday.setUTCDate(d.getUTCDate()-((d.getUTCDay()+6)%7));
+  const nextMonday=new Date(monday); nextMonday.setUTCDate(monday.getUTCDate()+7);
+  const nextDay=new Date(d); nextDay.setUTCDate(d.getUTCDate()+1);
+  const nextMonth=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,1));
+  const iso=x=>x.toISOString().slice(0,10);
+  return [[day,iso(nextDay)],[iso(monday),iso(nextMonday)],[day.slice(0,7)+'-01',iso(nextMonth)]];
+}
+function mergeScanStatsRecord(old, tracking, asins, at = new Date()) {
+  const unique=[...new Set(asins.map(x=>String(x||'').trim().toUpperCase()).filter(Boolean))];
+  if (!unique.length) return old || null;
+  return {tracking,at:old?.at || at.toISOString(),day:old?.day || scanStatsDay(at),asins:[...new Set([...(old?.asins || []),...unique])]};
+}
+function totalScanStats(records, day) {
+  return scanStatsPeriods(day).map(([start,end])=>records.reduce((n,r)=>{
+    if(r.day>=start && r.day<end){n.parcels++;n.products+=new Set(r.asins).size;}
+    return n;
+  },{parcels:0,products:0}));
+}
+function openScanStatsDb() {
+  return new Promise((resolve,reject)=>{
+    let finished=false;
+    const timer=setTimeout(()=>{finished=true;reject(new Error('Mémoire des statistiques indisponible'));},2500);
+    const req=indexedDB.open('vine-scan-statistics',1);
+    req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains('scans'))req.result.createObjectStore('scans',{keyPath:'tracking'});};
+    req.onsuccess=()=>{clearTimeout(timer);if(finished)req.result.close();else{finished=true;resolve(req.result);}};
+    req.onerror=req.onblocked=()=>{clearTimeout(timer);if(!finished){finished=true;reject(new Error('Mémoire des statistiques bloquée'));}};
+  });
+}
+let scanStatsChannel=null, scanStatsRefreshVersion=0;
+function scanStatsError(err) {
+  const el=document.getElementById('scanStatsNotice');
+  if(el)el.textContent='⚠️ Statistiques non enregistrées/indisponibles : '+String(err.message || err);
+}
+async function recordOpeningScan(value,matches) {
+  const tokens=extractTrackingTokens(value);
+  const tracking=tokens.length===1?tokens[0]:normalizeTrackingLookup(value);
+  if(!tracking || !matches.length)return;
+  const at=new Date();
+  let db;
+  try {
+    db=await openScanStatsDb();
+    await new Promise((resolve,reject)=>{
+      const tx=db.transaction('scans','readwrite'), store=tx.objectStore('scans');
+      const timer=setTimeout(()=>{try{tx.abort();}catch(_){}reject(new Error('Enregistrement trop lent'));},2500);
+      const req=store.get(tracking);
+      req.onsuccess=()=>{store.put(mergeScanStatsRecord(req.result,tracking,matches.map(r=>r.asin),at));};
+      tx.oncomplete=()=>{clearTimeout(timer);resolve();};
+      tx.onabort=tx.onerror=()=>{clearTimeout(timer);reject(tx.error || new Error('Écriture interrompue'));};
+    });
+    scanStatsChannel?.postMessage('refresh');
+    await renderScanStats();
+  }catch(err){scanStatsError(err);}finally{db?.close();}
+}
+async function readScanStats() {
+  const db=await openScanStatsDb();
+  try{return await new Promise((resolve,reject)=>{
+    const tx=db.transaction('scans','readonly'),req=tx.objectStore('scans').getAll();
+    const timer=setTimeout(()=>{try{tx.abort();}catch(_){}reject(new Error('Lecture trop lente'));},2500);
+    req.onsuccess=()=>{clearTimeout(timer);resolve(req.result || []);};
+    tx.onabort=req.onerror=()=>{clearTimeout(timer);reject(req.error || new Error('Lecture interrompue'));};
+  });}finally{db.close();}
+}
+async function renderScanStats() {
+  const version=++scanStatsRefreshVersion, input=document.getElementById('scanStatsDate');
+  if(!input)return;
+  try {
+    const day=input.value || scanStatsDay(), records=await readScanStats();
+    if(version!==scanStatsRefreshVersion)return;
+    const totals=totalScanStats(records,day), periods=scanStatsPeriods(day);
+    const labels=['Jour sélectionné','Semaine du '+periods[1][0], 'Mois '+day.slice(0,7)];
+    document.getElementById('scanStatsBody').innerHTML=totals.map((n,i)=>`<tr><th scope="row">${labels[i]}</th><td><strong>${n.parcels}</strong></td><td><strong>${n.products}</strong></td></tr>`).join('');
+    document.getElementById('scanStatsNotice').textContent=records.length ? `${records.length} colis enregistrés depuis le ${records.reduce((d,r)=>r.day<d?r.day:d,records[0].day)}. Heure de Paris.` : 'Les compteurs commenceront au prochain colis reconnu. Heure de Paris.';
+  }catch(err){scanStatsError(err);}
+}
+async function exportScanStats() {
+  try {
+    const records=await readScanStats();
+    const blob=new Blob([JSON.stringify({schema:1,timeZone:'Europe/Paris',exportedAt:new Date().toISOString(),records},null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='statistiques-scans-'+scanStatsDay()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }catch(err){scanStatsError(err);}
+}
+window.addEventListener('DOMContentLoaded',()=>{
+  document.getElementById('scanStatsDate').value=scanStatsDay();
+  document.getElementById('scanStatsDate').addEventListener('change',renderScanStats);
+  document.getElementById('scanStatsToday').addEventListener('click',()=>{document.getElementById('scanStatsDate').value=scanStatsDay();renderScanStats();});
+  document.getElementById('scanStatsExport').addEventListener('click',exportScanStats);
+  try{scanStatsChannel=new BroadcastChannel('vine-scan-statistics');scanStatsChannel.onmessage=renderScanStats;}catch(_){}
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)renderScanStats();});
+  renderScanStats();
+});
+
 function search(value, options = {}) {
   const resultDiv = document.getElementById("result");
   const countDiv = document.getElementById("count");
@@ -4560,6 +4670,8 @@ function search(value, options = {}) {
   }
 
   countDiv.innerHTML = `<span class="found">✅ ${matches.length} article(s) trouvé(s) pour ce colis (scan: ${escapeHtml(value)})</span>`;
+
+  recordOpeningScan(value, matches);
 
   // V13 : dès l’ouverture, le catalogue commun est alimenté pour le téléphone du rangeur.
   queueCloudCatalogMatches(matches);
@@ -6747,12 +6859,12 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 // =============================================================
-// V40.3.22 — diagnostic relais Cloudflare M110 + bouton de test
+// V40.3.23 — diagnostic relais Cloudflare M110 + bouton de test
 // - le navigateur vérifie toujours la dernière version de sw.js
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "40.3.22";
+const APP_VERSION = "40.3.23";
 try {
   const el = document.getElementById('appVersionText');
   if (el) el.textContent = `v${APP_VERSION}`;
@@ -6787,7 +6899,7 @@ async function installFreshServiceWorker() {
       location.reload();
     });
   } catch (err) {
-    console.warn("Service worker V40.3.22 non disponible :", err);
+    console.warn("Service worker V40.3.23 non disponible :", err);
   }
 }
 
