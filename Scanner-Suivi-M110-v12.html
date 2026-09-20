@@ -6,8 +6,8 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="40.3.20">
-<title>Scanner Suivi → ASIN → M110 — V40.3.20 + VINE Tracking V3.3.7</title>
+<meta name="app-version" content="40.3.21">
+<title>Scanner Suivi → ASIN → M110 — V40.3.21 + VINE Tracking V3.3.7</title>
 <script src="./Dernier Fonctionnel_files/xlsx.full.min.js.télécharger"></script>
 <script src="./Dernier Fonctionnel_files/html5-qrcode.min.js.télécharger"></script>
 <script src="./Dernier Fonctionnel_files/JsBarcode.all.min.js.télécharger"></script>
@@ -631,7 +631,7 @@
         <button class="btn" id="vtOrderRelayTest" type="button" style="background:#1565c0;padding:8px 12px;">🧪 Tester le relais</button>
         <span id="vtOrderRelayStatus" class="mini-note" style="margin:0;">Relais non testé.</span>
       </div>
-      <div class="mini-note">Google direct reste prioritaire. Le relais n’est essayé qu’en cas d’erreur réseau / délai dépassé. Utilise le secret <strong>VT_ORDER_RELAY_TOKEN</strong>, distinct du token d’écriture des téléphones.</div>
+      <div class="mini-note">Google direct est essayé une fois (5 s maximum si le relais est configuré). Le relais n’est essayé qu’en cas d’erreur réseau / délai dépassé. Utilise le secret <strong>VT_ORDER_RELAY_TOKEN</strong>, distinct du token d’écriture des téléphones.</div>
     </div>
   </details>
   <div id="vtOrderHistoryStatus" class="github-file-status" style="margin-top:8px;">Source VINE Tracking non configurée.</div>
@@ -3689,7 +3689,7 @@ async function syncGithubFiles(forceDetect = false, forceDownload = false) {
   }
 }
 
-const VT_EXPECTED_SERVER_BUILD = "3.3.7.20";
+const VT_SUPPORTED_SERVER_BUILDS = new Set(["3.3.7.20", "3.3.7.21", "3.3.7.22", "3.3.7.23"]);
 const VT_ORDER_SOURCE_URL_KEY = "vine-order-history-google-scanner-url-v1";
 const VT_ORDER_SOURCE_AUTO_KEY = "vine-order-history-google-auto-v1";
 const VT_ORDER_RELAY_URL_KEY = "vine-order-history-relay-url-v1";
@@ -3752,7 +3752,7 @@ function validateVineOrderHistoryPayload(payload, rawUrl) {
   if (!Array.isArray(payload.rows)) throw new Error("Réponse VINE Tracking sans tableau rows.");
   const info = vineOrderHistorySourceInfo(rawUrl);
   if (!payload.sourceId || String(payload.sourceId) !== info.sourceId) throw new Error("La réponse VINE provient d'un autre Google Sheet/source.");
-  if (String(payload.build || '') !== VT_EXPECTED_SERVER_BUILD) throw new Error(`Code.gs obsolète : serveur ${payload.build || 'ancien/inconnu'}, Scanner attendu ${VT_EXPECTED_SERVER_BUILD}. Mets à jour puis redéploie le même /exec.`);
+  if (!VT_SUPPORTED_SERVER_BUILDS.has(String(payload.build || ''))) throw new Error(`Code.gs obsolète : serveur ${payload.build || 'ancien/inconnu'}, Scanner attendu 3.3.7.20 à 3.3.7.23. Mets à jour puis redéploie le même /exec.`);
   if (payload.rows.length > 150000) throw new Error("Réponse VINE anormalement volumineuse.");
   for (const r of payload.rows) if (!(Array.isArray(r) && r.length >= 2)) throw new Error("Ligne VINE invalide.");
   return info;
@@ -3897,43 +3897,20 @@ function vineOrderHistoryJsonp(rawUrl, timeoutMs = VT_ORDER_MANUAL_TIMEOUT_MS) {
 
 
 async function fetchVineOrderHistoryWithRetry(rawUrl, totalTimeoutMs = VT_ORDER_MANUAL_TIMEOUT_MS) {
-  const total = Math.max(4000, Number(totalTimeoutMs || VT_ORDER_MANUAL_TIMEOUT_MS));
-  const deadline = Date.now() + total;
-  const retryDelays = [0, 900, 1800];
-  let lastError = null;
-
-  for (let attempt = 0; attempt < retryDelays.length; attempt++) {
-    const delay = retryDelays[attempt];
-    if (delay) {
-      const remainingBeforeWait = deadline - Date.now();
-      if (remainingBeforeWait <= delay + 800) break;
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
-    const remaining = deadline - Date.now();
-    if (remaining <= 800) break;
-    const perAttempt = Math.max(800, Math.min(10000, remaining));
-
-    try {
-      const payload = await vineOrderHistoryJsonp(rawUrl, perAttempt);
-      if (payload && payload.ok === true) { payload.__transport="direct"; return payload; }
-      const err = new Error(payload && payload.error ? payload.error : "Réponse VINE Tracking invalide.");
-      err.retryable = !!(payload && payload.retryable);
-      err.code = String(payload && payload.code || "");
-      lastError = err;
-      if (!err.retryable) throw err;
-    } catch (err) {
-      lastError = err;
-      const retryable = !!(err && err.retryable) || /SOURCE_BUSY|synchronisation|délai dépassé|impossible de joindre/i.test(String(err && err.message || err));
-      if (!retryable) throw err;
-    }
+  const deadline = Date.now() + Math.max(4000, Number(totalTimeoutMs));
+  const relay = vineOrderRelayConfigured();
+  // Une seule tentative directe ; réserver du temps au relais dans le même budget.
+  try {
+    const payload = await vineOrderHistoryJsonp(rawUrl, relay ? Math.min(5000, totalTimeoutMs / 2) : totalTimeoutMs);
+    if (payload && payload.ok === true) { payload.__transport = "direct"; return payload; }
+    const err = new Error(payload?.error || "Réponse Google invalide.");
+    err.code = payload?.code || "SOURCE_ERROR";
+    throw err;
+  } catch (err) {
+    // Un verrou occupé ou un refus d'authentification ne justifie pas une deuxième lecture.
+    if (err.code || !relay || deadline - Date.now() < 1000) throw err;
+    return vineOrderHistoryRelayFetch(rawUrl, deadline - Date.now());
   }
-  const directMsg=String(lastError&&lastError.message||"");
-  const directNetwork=/délai dépassé|impossible de joindre|network|failed to fetch|connection|load failed|err_connection/i.test(directMsg);
-  if (vineOrderRelayConfigured() && directNetwork) {
-    try { return await vineOrderHistoryRelayFetch(rawUrl, Math.max(5000,Math.min(15000,total))); }
-    catch(relayErr){ const e=new Error(`${directMsg || "Google direct indisponible"} ; relais Cloudflare: ${vineOrderHistoryRelayErrorLabel(relayErr)}`); e.code=String(relayErr&&relayErr.code||"RELAY_FAILED"); e.retryable=!!(relayErr&&relayErr.retryable); e.relayError=relayErr; throw e; }
-  }
-  throw lastError || new Error("VINE Tracking Google Sheets indisponible après plusieurs tentatives.");
 }
 
 function applyVineOrderHistoryPayload(payload, options = {}) {
@@ -3957,7 +3934,6 @@ function applyVineOrderHistoryPayload(payload, options = {}) {
   document.getElementById("status").innerHTML = `✅ <strong>${rows.length}</strong> lignes chargées depuis <strong>VINE Tracking Google Sheets</strong>${builtText}${cacheNote}${transportNote}. Colonne suivi: <strong>Carrier Name &amp; Tracking Number</strong>, ASIN: <strong>ASIN</strong>, Produit: <strong>Product Name</strong>${excludedText}${sharedText}${conflictText}.`;
   document.getElementById("vtOrderHistoryStatus").innerHTML = `✅ Source Google ${options.cached ? "mémorisée" : "active"}${options.transport === "relay" ? " via relais Cloudflare" : ""} — <strong>${rows.length}</strong> ligne(s) sûres${excludedText}${sharedText}${conflictText}.`;
   setGithubFileStatus("primary", "☁️ Order History fourni directement par VINE Tracking — GitHub conservé en secours.", "ok");
-  document.getElementById("scanInput").value = "";
   searchByProductTitle(document.getElementById("productTitleSearch").value);
   return rows.length;
 }
@@ -3974,7 +3950,7 @@ async function loadVineOrderHistorySource(options = {}) {
     if (fallbackOk) { vtOrderHistoryLastReadyAt=Date.now(); vtOrderHistoryLastReadySource='fallback'; }
     return rows.length;
   }
-  status.textContent = "☁️ Chargement depuis VINE Tracking…";
+  status.textContent = rows.length ? `💾 ${rows.length} lignes disponibles — actualisation en arrière-plan…` : "☁️ Premier chargement depuis VINE Tracking…";
   vtOrderHistoryLoadInFlight = (async () => {
     try {
       const payload = await fetchVineOrderHistoryWithRetry(raw, Number(options.timeoutMs || VT_ORDER_MANUAL_TIMEOUT_MS));
@@ -4043,6 +4019,11 @@ function vineOrderHistoryNeedsBlockingRefresh() {
 }
 
 function maybeRefreshVineOrderHistoryBeforeScan(value, origin = 'manual') {
+  if (rows.length > 0) {
+    if (vineOrderHistoryNeedsBlockingRefresh() && !vtOrderHistoryLoadInFlight)
+      loadVineOrderHistorySource({silent:true, timeoutMs:VT_ORDER_BACKGROUND_TIMEOUT_MS}).catch(()=>{});
+    return false;
+  }
   if (!vineOrderHistoryNeedsBlockingRefresh() && !vtOrderHistoryLoadInFlight) return false;
 
   // Ne jamais exploiter silencieusement un mapping VINE vieux de >2 min lorsque
@@ -4290,7 +4271,6 @@ function processPrimaryFileData(arrayBuffer, fileName = "", restored = false, me
   const fileText = fileName ? ` <span style="color:#555;">(${escapeHtml(fileName)})</span>` : "";
   document.getElementById("status").innerHTML =
     `✅ ${rows.length} lignes sûres chargées${fileText}. Colonne suivi: "<strong>${escapeHtml(headers[tCol])}</strong>", colonne ASIN: "<strong>${escapeHtml(headers[aCol])}</strong>"${orderColLabel}${pColLabel}${imgColLabel}.${quarantineText}${restoredText}${fileMetaHtml(meta)}`;
-  document.getElementById("scanInput").value = "";
   searchByProductTitle(document.getElementById("productTitleSearch").value);
 }
 
@@ -4488,7 +4468,7 @@ async function restoreSavedFiles() {
     rawVineUrl ? getVineOrderHistorySnapshot(rawVineUrl) : Promise.resolve(null)
   ]);
 
-  if (primary && primary.data) {
+  if (primary && primary.data && !vineSnapshot?.payload?.rows?.length) {
     try {
       processPrimaryFileData(primary.data, primary.name || "fichier mémorisé", true, primary);
     } catch (err) {
@@ -4507,7 +4487,8 @@ async function restoreSavedFiles() {
   // Si une source VINE est configurée, la dernière copie VINE sûre est plus
   // récente/prioritaire que l'ancien Order History GitHub restauré ci-dessus.
   if (rawVineUrl && vineSnapshot && vineSnapshot.payload) {
-    try { validateVineOrderHistoryPayload(vineSnapshot.payload, rawVineUrl); applyVineOrderHistoryPayload(vineSnapshot.payload, { cached: true }); }
+    try { validateVineOrderHistoryPayload(vineSnapshot.payload, rawVineUrl); applyVineOrderHistoryPayload(vineSnapshot.payload, { cached: true });
+      vtOrderHistoryLastReadyAt = Date.now(); vtOrderHistoryLastReadySource = 'cache'; }
     catch (err) { console.warn("Snapshot VINE mémorisé refusé :", err); }
   }
 }
@@ -6758,12 +6739,12 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 // =============================================================
-// V40.3.20 — diagnostic relais Cloudflare M110 + bouton de test
+// V40.3.21 — diagnostic relais Cloudflare M110 + bouton de test
 // - le navigateur vérifie toujours la dernière version de sw.js
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "40.3.20";
+const APP_VERSION = "40.3.21";
 try {
   const el = document.getElementById('appVersionText');
   if (el) el.textContent = `v${APP_VERSION}`;
@@ -6798,7 +6779,7 @@ async function installFreshServiceWorker() {
       location.reload();
     });
   } catch (err) {
-    console.warn("Service worker V40.3.20 non disponible :", err);
+    console.warn("Service worker V40.3.21 non disponible :", err);
   }
 }
 
