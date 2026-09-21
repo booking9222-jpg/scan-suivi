@@ -6,8 +6,8 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="41.1.0">
-<title>Scanner Suivi → ASIN → M110 — V41.1.0 + VINE Tracking V3.3.7</title>
+<meta name="app-version" content="42.0.0">
+<title>Scanner Suivi → ASIN → M110 — V42.0 + VINE Tracking V3.3.7</title>
 <script src="./Dernier Fonctionnel_files/xlsx.full.min.js.télécharger"></script>
 <script src="./Dernier Fonctionnel_files/html5-qrcode.min.js.télécharger"></script>
 <script src="./Dernier Fonctionnel_files/JsBarcode.all.min.js.télécharger"></script>
@@ -450,7 +450,7 @@
 <!-- V21 : M110 Ultra sûr 128 octets, optimisé 1-13 -->
 
 <h1>📦 Vine : ouverture → M110 → rangement synchronisé</h1>
-<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v41.1.0</strong></div>
+<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v42.0.0</strong></div>
 
 <div class="team-workflow-card" id="teamWorkflowCard">
   <div class="team-workflow-title">⚙️ Organisation du travail</div>
@@ -548,6 +548,21 @@
     ✅ 40×30 Standard : mise en page équilibrée actuelle.
   </div>
 
+  <div style="margin-top:10px; padding:10px; border:1px solid #c8e6c9; border-radius:9px; background:#f6fff7;">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <label style="font-size:13px;font-weight:900;color:#1b5e20;">🔌 Protocole M110 :
+        <select id="m110ProtocolMode" style="padding:7px;border:1px solid #aaa;border-radius:6px;">
+          <option value="auto" selected>🧠 Auto — détecter firmware / compatibilité</option>
+          <option value="legacy">🟦 Legacy M110 — firmware ancien / protocole raster</option>
+          <option value="printmaster">🟩 Print Master récent — protocole 0x1F compressé</option>
+        </select>
+      </label>
+    </div>
+    <div id="m110ProtocolInfo" class="mini-note" style="margin-top:6px;font-weight:800;color:#1b5e20;">
+      Auto : la V42 active les notifications FF03, interroge le firmware et choisit le protocole mémorisé pour chaque imprimante.
+    </div>
+  </div>
+
   <div class="printer-row">
     <label style="font-size:13px;">Densité :
       <select id="m110Density" style="padding:7px; border:1px solid #bbb; border-radius:6px;">
@@ -581,7 +596,7 @@
       Si la M110 saute encore une étiquette blanche, charge le rouleau bien droit puis appuie une fois sur le bouton d'avance papier pour qu'elle reconnaisse le format avant de relancer le test de 3 étiquettes.
     </div>
     <div id="m110TransportInfo" class="mini-note" style="margin-top:5px; font-weight:700; color:#0d47a1;">
-      Compatibilité V41.1 : largeur raster réelle (40 mm = 320 points / 40 octets) + séquence M110 temporisée. Paquets ≤ 128 octets.
+      Compatibilité V42 : largeur raster réelle (40 mm = 320 points / 40 octets) + séquence M110 temporisée. Paquets ≤ 128 octets.
     </div>
 
     <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;font-weight:900;color:#4527a0;">
@@ -881,6 +896,7 @@ const M110_BLE = {
     '49535343-fe7d-4ae5-8fa9-9fafd205e455'
   ],
   preferredWriteCharacteristic: 0xff02,
+  preferredNotifyCharacteristic: 0xff03,
   chunkSize: 128
 };
 
@@ -1054,7 +1070,7 @@ function updateM110SpeedHint() {
   } else if (select.value === 'turbo') {
     hint.textContent = "Turbo fiable 128 : même transport sûr en 128 octets, avec un peu plus de marge entre les étiquettes.";
   } else if (select.value === 'extrasafe') {
-    hint.textContent = "Extra Extra Safe : priorité maximale à la fiabilité. Paquets de 64 octets, une seule écriture à la fois et longues pauses. La V41.1 privilégie Write Without Response, comme le protocole M110 documenté.";
+    hint.textContent = "Extra Extra Safe : priorité maximale à la fiabilité. Paquets de 64 octets, une seule écriture à la fois et longues pauses. La V42 privilégie Write Without Response, comme le protocole M110 documenté.";
   } else if (select.value === 'safe') {
     hint.textContent = 'Compatible : très prudent, mais moins conservateur que Extra Extra Safe.';
   } else if (select.value === 'normal') {
@@ -1086,8 +1102,15 @@ let m110Device = null;
 let m110Server = null;
 let m110Service = null;
 let m110WriteChar = null;
+let m110NotifyChar = null;
 let m110UseWriteWithResponse = false;
 let m110PrintQueue = Promise.resolve();
+let m110NotificationHandler = null;
+let m110LastFirmware = '';
+let m110LastVersion = '';
+let m110FlowCredits = 0;
+let m110FlowWaiters = [];
+const M110_PROTOCOL_KEY = 'vine-m110-protocol-default-v42';
 
 // V30 — santé connexion / adaptation
 let m110ConnectedAt = 0;
@@ -1166,6 +1189,178 @@ function updateM110AdaptiveStatus(extra = '') {
   el.style.color = '#4527a0';
 }
 
+function getM110ProtocolSelection() {
+  return document.getElementById('m110ProtocolMode')?.value || 'auto';
+}
+
+function setM110ProtocolInfo(text, state = 'ok') {
+  const el = document.getElementById('m110ProtocolInfo');
+  if (!el) return;
+  el.textContent = text;
+  el.style.color = state === 'err' ? '#b71c1c' : state === 'wait' ? '#e65100' : '#1b5e20';
+}
+
+function parseM110VersionParts(value) {
+  const parts = String(value || '').trim().split('.').map(v => Number(v));
+  return parts.length && parts.every(Number.isFinite) ? parts : [];
+}
+
+function resolveM110ProtocolMode() {
+  const selected = getM110ProtocolSelection();
+  if (selected === 'legacy' || selected === 'printmaster') return selected;
+
+  // V42 : priorité au profil propre à chaque imprimante.
+  const key = getM110PrinterKey(m110Device);
+  const profile = key ? readM110PrinterProfiles()[key] : null;
+  if (profile?.detectedProtocol === 'legacy' || profile?.detectedProtocol === 'printmaster') {
+    return profile.detectedProtocol;
+  }
+
+  // La révision qui pose problème ici annonce 2.2.3 et accepte les transferts GATT
+  // sans lancer le moteur avec le chemin raster classique. Pour cette version, on
+  // privilégie le protocole Print Master 0x1F. Les 1.x restent en Legacy.
+  const fw = parseM110VersionParts(m110LastFirmware || m110LastVersion);
+  if (fw.length) {
+    if (fw[0] >= 2) return 'printmaster';
+    return 'legacy';
+  }
+
+  // Sans réponse firmware on garde le protocole M110 historique, le plus universel.
+  return 'legacy';
+}
+
+function updateM110ProtocolUi(reason = '') {
+  const mode = resolveM110ProtocolMode();
+  const fw = m110LastFirmware || m110LastVersion || 'non lu';
+  const notify = m110NotifyChar ? 'FF03 actif' : 'FF03 indisponible';
+  const label = mode === 'printmaster' ? 'Print Master 0x1F compressé' : 'Legacy M110 raster';
+  setM110ProtocolInfo(`Protocole actif : ${label} · firmware ${fw} · ${notify}${reason ? ' · ' + reason : ''}.`);
+}
+
+function restoreM110ProtocolUi() {
+  const el = document.getElementById('m110ProtocolMode');
+  if (!el) return;
+  try {
+    const saved = localStorage.getItem(M110_PROTOCOL_KEY);
+    if (saved && ['auto','legacy','printmaster'].includes(saved)) el.value = saved;
+  } catch (_) {}
+  updateM110ProtocolUi();
+}
+
+function rememberDetectedM110Protocol(mode, reason = '') {
+  if (!m110Device || !['legacy','printmaster'].includes(mode)) return;
+  const key = getM110PrinterKey(m110Device);
+  if (!key) return;
+  const profiles = readM110PrinterProfiles();
+  const profile = profiles[key] || captureCurrentM110PrinterProfile(m110Device) || {};
+  profiles[key] = { ...profile, detectedProtocol: mode, protocolReason: reason || profile.protocolReason || '', updatedAt: Date.now() };
+  writeM110PrinterProfiles(profiles);
+  updateM110ProtocolUi(reason);
+}
+
+function handleM110Notification(event) {
+  try {
+    const value = event?.target?.value;
+    if (!value) return;
+    const data = new Uint8Array(value.buffer, value.byteOffset || 0, value.byteLength || value.buffer.byteLength);
+    console.log('[M110 <<<]', Array.from(data).map(b => b.toString(16).padStart(2,'0')).join(' '));
+
+    // Nouveau protocole Print Master : crédits de flux [01, N].
+    if (data.length >= 2 && data[0] === 0x01) {
+      if (data[1] === 0x04) m110FlowCredits = 4;
+      else m110FlowCredits += data[1];
+      if (m110FlowCredits > 0 && m110FlowWaiters.length) {
+        const waiters = m110FlowWaiters.splice(0);
+        waiters.forEach(fn => { try { fn(); } catch (_) {} });
+      }
+      return;
+    }
+
+    // Réponses M110 historiques : 1A <type> <data...>
+    if (data.length >= 3 && data[0] === 0x1a) {
+      const type = data[1];
+      if (type === 0x07 || type === 0x11) {
+        const version = Array.from(data.slice(2)).join('.');
+        if (type === 0x07) m110LastFirmware = version;
+        else m110LastVersion = version;
+        updateM110ProtocolUi('réponse imprimante reçue');
+      }
+    }
+  } catch (err) {
+    console.warn('Notification M110 illisible:', err);
+  }
+}
+
+async function setupM110Notifications(service) {
+  m110NotifyChar = null;
+  m110FlowCredits = 0;
+  if (!service) return false;
+  try {
+    let notifyChar = null;
+    try {
+      notifyChar = await service.getCharacteristic(M110_BLE.preferredNotifyCharacteristic);
+    } catch (_) {
+      const chars = await service.getCharacteristics();
+      notifyChar = chars.find(c => c.properties?.notify || c.properties?.indicate) || null;
+    }
+    if (!notifyChar) return false;
+
+    if (m110NotificationHandler) {
+      try { notifyChar.removeEventListener('characteristicvaluechanged', m110NotificationHandler); } catch (_) {}
+    }
+    m110NotificationHandler = handleM110Notification;
+    await notifyChar.startNotifications();
+    notifyChar.addEventListener('characteristicvaluechanged', m110NotificationHandler);
+    m110NotifyChar = notifyChar;
+    await sleep(120);
+    return true;
+  } catch (err) {
+    console.warn('Notifications M110 non disponibles:', err);
+    m110NotifyChar = null;
+    return false;
+  }
+}
+
+async function queryM110InfoOnConnect() {
+  // Même requête que les implémentations Web M110 récentes : firmware puis version.
+  // Elle sert aussi de petit "handshake" après abonnement FF03.
+  if (!isM110Connected() || !m110NotifyChar) return;
+  m110LastFirmware = '';
+  m110LastVersion = '';
+  try {
+    await m110Send([0x1f, 0x11, 0x07]);
+    await sleep(180);
+    if (!m110LastFirmware) {
+      await m110Send([0x1f, 0x11, 0x33]);
+      await sleep(180);
+    }
+  } catch (err) {
+    console.warn('Lecture firmware M110 impossible:', err);
+  }
+  updateM110ProtocolUi('initialisation Bluetooth terminée');
+}
+
+async function waitForM110FlowCredit(timeoutMs = 800) {
+  if (!m110NotifyChar) return false;
+  if (m110FlowCredits > 0) return true;
+  return await new Promise(resolve => {
+    let done = false;
+    const finish = (ok) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(ok);
+    };
+    const waiter = () => finish(true);
+    m110FlowWaiters.push(waiter);
+    const timer = setTimeout(() => {
+      const idx = m110FlowWaiters.indexOf(waiter);
+      if (idx >= 0) m110FlowWaiters.splice(idx, 1);
+      finish(false);
+    }, timeoutMs);
+  });
+}
+
 function captureCurrentM110PrinterProfile(device = m110Device) {
   if (!device) return null;
   const size = getSelectedLabelSize();
@@ -1179,6 +1374,9 @@ function captureCurrentM110PrinterProfile(device = m110Device) {
     customWidth: Number(document.getElementById('customLabelWidth')?.value || size.width || 40),
     customHeight: Number(document.getElementById('customLabelHeight')?.value || size.height || 30),
     adaptive: isM110AdaptiveEnabled(),
+    protocol: getM110ProtocolSelection(),
+    detectedProtocol: resolveM110ProtocolMode(),
+    firmware: m110LastFirmware || m110LastVersion || '',
     updatedAt: Date.now()
   };
 }
@@ -1238,9 +1436,10 @@ function updateM110PrinterProfileInfo() {
       ? `${profile.customWidth || 40}×${profile.customHeight || 30}`
       : (presetLabels[profile.labelPreset] || String(profile.labelPreset || '40x30').replace('x', '×'));
 
+  const protocolLabel = (profile.detectedProtocol || profile.protocol) === 'printmaster' ? 'Print Master 0x1F' : 'Legacy';
   el.textContent =
     `💾 ${name} : ${label} mm · densité ${profile.density || 6} · ${speed} · ` +
-    `${profile.layout || 'wide'} · adaptatif ${profile.adaptive === false ? 'OFF' : 'ON'}.`;
+    `${profile.layout || 'wide'} · ${protocolLabel} · adaptatif ${profile.adaptive === false ? 'OFF' : 'ON'}.`;
 }
 
 function applyM110PrinterProfile(device = m110Device) {
@@ -1266,6 +1465,7 @@ function applyM110PrinterProfile(device = m110Device) {
     const widthEl = document.getElementById('customLabelWidth');
     const heightEl = document.getElementById('customLabelHeight');
     const adaptiveEl = document.getElementById('m110AdaptiveSpeed');
+    const protocolEl = document.getElementById('m110ProtocolMode');
 
     if (speedEl && M110_SPEED_PROFILES[profile.speed]) speedEl.value = profile.speed;
     if (densityEl && ['4','5','6','7','8'].includes(String(profile.density))) densityEl.value = String(profile.density);
@@ -1274,11 +1474,13 @@ function applyM110PrinterProfile(device = m110Device) {
     if (widthEl && profile.customWidth) widthEl.value = profile.customWidth;
     if (heightEl && profile.customHeight) heightEl.value = profile.customHeight;
     if (adaptiveEl && typeof profile.adaptive === 'boolean') adaptiveEl.checked = profile.adaptive;
+    if (protocolEl && ['auto','legacy','printmaster'].includes(profile.protocol)) protocolEl.value = profile.protocol;
 
     updateLabelSizeUi();
     updateM110SpeedHint();
     updateM110LayoutHint();
     updateM110AdaptiveStatus('Profil restauré automatiquement pour cette imprimante.');
+    updateM110ProtocolUi('profil restauré');
   } finally {
     m110ApplyingPrinterProfile = false;
   }
@@ -1922,6 +2124,8 @@ function bindM110DisconnectListener(device) {
     m110Server = null;
     m110Service = null;
     m110WriteChar = null;
+    m110NotifyChar = null;
+    m110FlowCredits = 0;
     setM110Status(`⚠️ ${device.name || 'M110'} déconnectée — reconnexion automatique…`, 'wait');
     setM110Progress(0, false);
     updateM110Buttons();
@@ -1941,6 +2145,7 @@ async function discoverM110WriteCharacteristic(device) {
   m110Server = device.gatt;
   m110Service = null;
   m110WriteChar = null;
+  m110NotifyChar = null;
 
   let lastError = null;
 
@@ -1948,11 +2153,12 @@ async function discoverM110WriteCharacteristic(device) {
     try {
       const service = await m110Server.getPrimaryService(serviceUuid);
       let writeChar = null;
+      let chars = null;
 
       try {
         writeChar = await service.getCharacteristic(M110_BLE.preferredWriteCharacteristic);
       } catch (_) {
-        const chars = await service.getCharacteristics();
+        chars = await service.getCharacteristics();
         writeChar = chars.find(c => c.properties.writeWithoutResponse || c.properties.write) || null;
       }
 
@@ -1961,6 +2167,11 @@ async function discoverM110WriteCharacteristic(device) {
         m110WriteChar = writeChar;
         m110UseWriteWithResponse =
           !writeChar.properties.writeWithoutResponse && !!writeChar.properties.write;
+
+        // V42 : les M110/M110S récentes exposent FF03 et les applis Web qui
+        // fonctionnent s'y abonnent dès la connexion. Certains firmwares restent
+        // silencieux si cette initialisation n'a pas eu lieu.
+        await setupM110Notifications(service);
         return true;
       }
     } catch (err) {
@@ -2004,6 +2215,10 @@ async function finishM110Connection(device, silent = false, maxAttempts = 3) {
 
       await discoverM110WriteCharacteristic(device);
 
+      // Laisse Android finaliser CCCD/notifications puis interroge le firmware.
+      await sleep(180);
+      await queryM110InfoOnConnect();
+
       rememberLastM110Device(device);
       m110ConnectedAt = Date.now();
       m110LastIoAt = Date.now();
@@ -2017,7 +2232,8 @@ async function finishM110Connection(device, silent = false, maxAttempts = 3) {
         const cUuid = String(m110WriteChar?.uuid || '').toLowerCase();
         const sUuid = String(m110Service?.uuid || '').toLowerCase();
         const mode = m110WriteChar?.properties?.writeWithoutResponse ? 'Write Without Response' : 'Write With Response';
-        setM110TransportInfo(`Bluetooth : service ${sUuid || '?'} · écriture ${cUuid || '?'} · ${mode} · V41.1 largeur raster réelle.`);
+        const nUuid = String(m110NotifyChar?.uuid || '').toLowerCase();
+        setM110TransportInfo(`Bluetooth : service ${sUuid || '?'} · écriture ${cUuid || '?'} · notifications ${nUuid || '—'} · ${mode} · V42 universelle.`);
       } catch (_) {}
       updateM110Buttons();
       updateM110PrinterProfileInfo();
@@ -2150,9 +2366,14 @@ function disconnectM110() {
   try {
     if (m110Device?.gatt?.connected) m110Device.gatt.disconnect();
   } catch (_) {}
+  try {
+    if (m110NotifyChar && m110NotificationHandler) m110NotifyChar.removeEventListener('characteristicvaluechanged', m110NotificationHandler);
+  } catch (_) {}
   m110Server = null;
   m110Service = null;
   m110WriteChar = null;
+  m110NotifyChar = null;
+  m110FlowCredits = 0;
   m110ConnectedAt = 0;
   setM110Status('M110 non connectée. Touchez son nom dans « Connexion rapide » pour reconnecter.', 'wait');
   setM110Progress(0, false);
@@ -2329,7 +2550,7 @@ function restoreLabelSizeUi() {
   updateLabelSizeUi();
 }
 
-// V41.1 — IMPORTANT : le champ GS v 0 doit annoncer la largeur REELLE du raster.
+// V42 — IMPORTANT : le champ GS v 0 doit annoncer la largeur REELLE du raster.
 // 40 mm à 203 dpi = 320 points = 40 octets/ligne. L'ancienne version annonçait
 // toujours 48 octets (384 points), même pour une étiquette 40 mm. Les anciens
 // firmwares le toléraient, mais des M110 récentes peuvent accepter le transfert
@@ -2366,7 +2587,7 @@ function m110CanvasToRaster(labelCanvas) {
   };
 }
 
-// V41.1 — profil filaire conservateur commun aux M110 anciennes et récentes.
+// V42 — profil filaire conservateur commun aux M110 anciennes et récentes.
 // Les réglages UI restent disponibles, mais on n'envoie jamais plus vite que
 // la séquence M110 documentée : commandes séparées, 128 octets max, ~20 ms
 // entre paquets, ~30 ms entre commandes, 300 ms avant footer.
@@ -2384,6 +2605,133 @@ function getM110WireProfile(baseProfile = null) {
     // Le chemin M110 documenté utilise prioritairement Write Without Response.
     forceResponse: false
   };
+}
+
+function concatUint8M110(parts) {
+  const arrays = parts.map(p => p instanceof Uint8Array ? p : new Uint8Array(p));
+  const total = arrays.reduce((n, a) => n + a.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const a of arrays) { out.set(a, offset); offset += a.length; }
+  return out;
+}
+
+function adler32M110(data) {
+  const MOD = 65521;
+  let a = 1, b = 0;
+  for (let i = 0; i < data.length; i++) {
+    a += data[i];
+    b += a;
+    if ((i & 0x0fff) === 0x0fff) { a %= MOD; b %= MOD; }
+  }
+  a %= MOD; b %= MOD;
+  return (((b << 16) | a) >>> 0);
+}
+
+// ZLIB RFC1950 + blocs DEFLATE "stored". CMF=0x28 annonce une fenêtre 1 KiB,
+// identique à l'implémentation Print Master documentée. Aucune bibliothèque externe.
+function zlibStoreM110(data) {
+  const input = data instanceof Uint8Array ? data : new Uint8Array(data);
+  const parts = [new Uint8Array([0x28, 0x15])]; // CM=8, CINFO=2 (1 KiB), FCHECK valide
+  let offset = 0;
+  while (offset < input.length || (input.length === 0 && offset === 0)) {
+    const len = Math.min(65535, input.length - offset);
+    const final = offset + len >= input.length;
+    const nlen = (~len) & 0xffff;
+    parts.push(new Uint8Array([
+      final ? 0x01 : 0x00,
+      len & 0xff, (len >> 8) & 0xff,
+      nlen & 0xff, (nlen >> 8) & 0xff
+    ]));
+    if (len) parts.push(input.slice(offset, offset + len));
+    offset += len;
+    if (input.length === 0) break;
+  }
+  const ad = adler32M110(input);
+  parts.push(new Uint8Array([(ad >>> 24) & 0xff, (ad >>> 16) & 0xff, (ad >>> 8) & 0xff, ad & 0xff]));
+  return concatUint8M110(parts);
+}
+
+function padRasterToHeadM110(raster) {
+  validateM110Raster(raster);
+  if (raster.widthBytes === M110_HEAD_BYTES) return raster;
+  if (raster.widthBytes > M110_HEAD_BYTES) throw new Error('Raster trop large pour la tête M110');
+
+  const out = new Uint8Array(M110_HEAD_BYTES * raster.heightLines);
+  const left = Math.floor((M110_HEAD_BYTES - raster.widthBytes) / 2);
+  for (let y = 0; y < raster.heightLines; y++) {
+    const srcStart = y * raster.widthBytes;
+    const dstStart = y * M110_HEAD_BYTES + left;
+    out.set(raster.data.subarray(srcStart, srcStart + raster.widthBytes), dstStart);
+  }
+  return { data: out, widthBytes: M110_HEAD_BYTES, widthDots: M110_HEAD_DOTS, heightLines: raster.heightLines };
+}
+
+function buildPrintMasterImageM110(raster) {
+  const full = padRasterToHeadM110(raster);
+  const compressed = zlibStoreM110(full.data);
+  const h = full.heightLines;
+  const l = compressed.length >>> 0;
+  const header = new Uint8Array([
+    0x1f, 0x10,
+    (full.widthBytes >> 8) & 0xff, full.widthBytes & 0xff,
+    (h >> 8) & 0xff, h & 0xff,
+    (l >>> 24) & 0xff, (l >>> 16) & 0xff, (l >>> 8) & 0xff, l & 0xff
+  ]);
+  return { payload: concatUint8M110([header, compressed]), compressedBytes: compressed.length, full };
+}
+
+async function sendPrintMasterPayloadM110(payload, onProgress = null) {
+  const bytes = payload instanceof Uint8Array ? payload : new Uint8Array(payload);
+  const chunkSize = 90;
+  let offset = 0;
+  let writes = 0;
+
+  while (offset < bytes.length) {
+    let flowControlled = false;
+    if (m110NotifyChar) {
+      if (m110FlowCredits <= 0) {
+        flowControlled = await waitForM110FlowCredit(450);
+      } else {
+        flowControlled = true;
+      }
+      if (flowControlled && m110FlowCredits > 0) m110FlowCredits--;
+    }
+
+    const end = Math.min(offset + chunkSize, bytes.length);
+    await m110Send(bytes.slice(offset, end));
+    offset = end;
+    writes++;
+    if (onProgress) onProgress(Math.round(offset / bytes.length * 100));
+    await sleep(flowControlled ? 5 : 30);
+  }
+  return { chunkSize, writes };
+}
+
+async function sendM110PrintMasterJob(raster, density = 6, onProgress = null) {
+  validateM110Raster(raster);
+  const densityValue = Math.max(1, Math.min(15, Math.round(5 + Math.max(1, Math.min(8, density)) * 1.25)));
+  const speedValue = 2;
+  const image = buildPrintMasterImageM110(raster);
+
+  // Active le mode de communication BLE utilisé par la famille Quin récente.
+  await m110Send([0x1f, 0xb2, 0x00]);
+  await sleep(60);
+
+  const payload = concatUint8M110([
+    new Uint8Array([0x1f, 0x80, 0x01, 0x20]), // papier avec gaps
+    new Uint8Array([0x1f, 0x70, 0x01, densityValue]),
+    new Uint8Array([0x1f, 0x60, 0x01, speedValue]),
+    new Uint8Array([0x1f, 0xc0, 0x01, 0x00]), // start
+    new Uint8Array([0x1f, 0x11, 0x51]),       // align start
+    image.payload,
+    new Uint8Array([0x1f, 0xc0, 0x01, 0x01]), // stop
+    new Uint8Array([0x1f, 0x11, 0x50])         // align end/feed
+  ]);
+
+  const transport = await sendPrintMasterPayloadM110(payload, onProgress);
+  await sleep(700);
+  return { ...transport, compressedBytes: image.compressedBytes, protocol: 'printmaster' };
 }
 
 function validateM110Raster(raster) {
@@ -2440,14 +2788,25 @@ async function printRasterM110(raster, density = 6, onProgress = null) {
   if (!isM110Connected()) throw new Error('M110 non connectée');
 
   const startedAt = performance.now();
-  const transport = await sendM110RasterJob(raster, density, getM110SpeedProfile(), onProgress);
-  const elapsed = Math.round(performance.now() - startedAt);
+  const mode = resolveM110ProtocolMode();
+  let transport;
 
+  if (mode === 'printmaster') {
+    transport = await sendM110PrintMasterJob(raster, density, onProgress);
+    rememberDetectedM110Protocol('printmaster', 'impression Print Master 0x1F');
+  } else {
+    transport = await sendM110RasterJob(raster, density, getM110SpeedProfile(), onProgress);
+    rememberDetectedM110Protocol('legacy', 'impression Legacy M110');
+  }
+
+  const elapsed = Math.round(performance.now() - startedAt);
+  const modeText = mode === 'printmaster' ? 'Print Master 0x1F' : 'Legacy M110';
+  const extra = transport.compressedBytes ? ` · ZLIB ${transport.compressedBytes} o` : '';
   setM110TransportInfo(
-    `M110 V41.1 : ${raster.widthBytes * 8}×${raster.heightLines} points · ` +
-    `${raster.widthBytes} octets/ligne · ${transport.chunkSize} octets/paquet · ` +
-    `${transport.writes} écritures · ${(elapsed / 1000).toFixed(2)} s.`
+    `M110 V42 ${modeText} : ${raster.widthBytes * 8}×${raster.heightLines} points · ` +
+    `${transport.chunkSize} octets/paquet · ${transport.writes} écritures${extra} · ${(elapsed / 1000).toFixed(2)} s.`
   );
+  updateM110ProtocolUi('dernière impression');
   return elapsed;
 }
 
@@ -2896,41 +3255,34 @@ async function printRasterBatchM110(rasters, density = 6, onLabelProgress = null
   const list = Array.isArray(rasters) ? rasters : [];
   if (!list.length) return { elapsedMs: 0, chunkSize: 128, writes: 0, microBatches: 0 };
 
-  // V41.1 : pour maximiser la compatibilité (FW 1.x et 2.x), chaque étiquette
-  // est un job M110 complet. Cela évite qu'un firmware récent considère la
-  // seconde image comme la continuation d'un raster précédent.
+  const mode = resolveM110ProtocolMode();
   const profile = getM110WireProfile(getM110SpeedProfile());
   const startedAt = performance.now();
   let totalWrites = 0;
+  let lastChunkSize = mode === 'printmaster' ? 90 : profile.chunkSize;
 
   for (let i = 0; i < list.length; i++) {
     const raster = list[i];
-    const result = await sendM110RasterJob(raster, density, profile, null);
-    totalWrites += result.writes;
+    const result = mode === 'printmaster'
+      ? await sendM110PrintMasterJob(raster, density, null)
+      : await sendM110RasterJob(raster, density, profile, null);
+    totalWrites += result.writes || 0;
+    lastChunkSize = result.chunkSize || lastChunkSize;
 
     if (onLabelProgress) onLabelProgress(i + 1, list.length);
-
     if (i < list.length - 1) {
-      // Le footer a déjà sa pause; cette marge supplémentaire laisse le capteur
-      // de gap et le moteur se stabiliser avant le job suivant.
-      await sleep(profile.betweenLabels);
+      await sleep(mode === 'printmaster' ? 800 : profile.betweenLabels);
     }
   }
 
+  rememberDetectedM110Protocol(mode, mode === 'printmaster' ? 'lot Print Master 0x1F' : 'lot Legacy M110');
   const elapsedMs = Math.round(performance.now() - startedAt);
-  const first = list[0];
   setM110TransportInfo(
-    `Lot M110 V41.1 : ${list.length} étiquette(s) · ` +
-    `${first.widthBytes * 8} points de large · ${profile.chunkSize} octets/paquet · ` +
-    `${totalWrites} écritures · ${(elapsedMs / 1000).toFixed(2)} s.`
+    `Lot M110 V42 ${mode === 'printmaster' ? 'Print Master 0x1F' : 'Legacy'} : ${list.length} étiquette(s) · ` +
+    `${lastChunkSize} octets/paquet · ${totalWrites} écritures · ${(elapsedMs / 1000).toFixed(2)} s.`
   );
 
-  return {
-    elapsedMs,
-    chunkSize: profile.chunkSize,
-    writes: totalWrites,
-    microBatches: list.length
-  };
+  return { elapsedMs, chunkSize: lastChunkSize, writes: totalWrites, microBatches: list.length };
 }
 
 async function printOneM110(match, trackingValue) {
@@ -6853,7 +7205,7 @@ window.addEventListener("DOMContentLoaded", () => {
     updateM110SpeedHint();
     updateM110AdaptiveStatus('Réglage manuel mémorisé pour cette imprimante.');
     saveCurrentM110PrinterProfile('débit manuel');
-    setM110TransportInfo('Compatibilité V41.1 : largeur raster réelle (40 mm = 320 points / 40 octets) + séquence M110 temporisée. Paquets ≤ 128 octets.');
+    setM110TransportInfo('Compatibilité V42 : largeur raster réelle (40 mm = 320 points / 40 octets) + séquence M110 temporisée. Paquets ≤ 128 octets.');
   });
   document.getElementById('m110LayoutProfile').addEventListener('change', () => {
     updateM110LayoutHint();
@@ -6870,6 +7222,16 @@ window.addEventListener("DOMContentLoaded", () => {
     saveCurrentM110PrinterProfile('adaptatif');
   });
 
+  const protocolSelect = document.getElementById('m110ProtocolMode');
+  if (protocolSelect) {
+    protocolSelect.addEventListener('change', () => {
+      try { localStorage.setItem(M110_PROTOCOL_KEY, protocolSelect.value); } catch (_) {}
+      saveCurrentM110PrinterProfile('protocole changé');
+      updateM110ProtocolUi('sélection manuelle');
+    });
+    restoreM110ProtocolUi();
+  }
+
   document.getElementById('testM110').addEventListener('click', () => manualPrintM110([makeM110TestMatch()], 'TEST'));
   document.getElementById('testM110Burst').addEventListener('click', testM110Burst);
   document.addEventListener('visibilitychange', () => {
@@ -6882,12 +7244,12 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 // =============================================================
-// V41.1.0 — compatibilité M110 ancienne + firmware récent
+// V42.0 — compatibilité M110 ancienne + firmware récent
 // - le navigateur vérifie toujours la dernière version de sw.js
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "41.1.0";
+const APP_VERSION = "42.0.0";
 try {
   const el = document.getElementById('appVersionText');
   if (el) el.textContent = `v${APP_VERSION}`;
@@ -6922,7 +7284,7 @@ async function installFreshServiceWorker() {
       location.reload();
     });
   } catch (err) {
-    console.warn("Service worker V41.1.0 non disponible :", err);
+    console.warn("Service worker V42.0 non disponible :", err);
   }
 }
 
