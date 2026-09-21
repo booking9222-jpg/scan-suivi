@@ -6,8 +6,8 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="42.0.1">
-<title>Scanner Suivi → ASIN → M110 — V42.0.1 + VINE Tracking V3.3.7</title>
+<meta name="app-version" content="42.0.2">
+<title>Scanner Suivi → ASIN → M110 — V42.0.2 + VINE Tracking V3.3.7</title>
 <script src="./Dernier Fonctionnel_files/xlsx.full.min.js.télécharger"></script>
 <script src="./Dernier Fonctionnel_files/html5-qrcode.min.js.télécharger"></script>
 <script src="./Dernier Fonctionnel_files/JsBarcode.all.min.js.télécharger"></script>
@@ -450,7 +450,7 @@
 <!-- V21 : M110 Ultra sûr 128 octets, optimisé 1-13 -->
 
 <h1>📦 Vine : ouverture → M110 → rangement synchronisé</h1>
-<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v42.0.1</strong></div>
+<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v42.0.2</strong></div>
 
 <div class="team-workflow-card" id="teamWorkflowCard">
   <div class="team-workflow-title">⚙️ Organisation du travail</div>
@@ -664,7 +664,7 @@
   <div id="vtOrderHistoryStatus" class="github-file-status" style="margin-top:8px;">Source VINE Tracking non configurée.</div>
 <details id="vineQuarantinePanel" style="margin-top:16px">
 <summary><strong>Associations à vérifier — quarantaine</strong></summary>
-<p>Ces produits sont des correspondances possibles. Vérifie le contenu du colis avant de sélectionner les produits à imprimer. Le statut de livraison ne bloque pas leur affichage.</p>
+<p>Ces produits sont des correspondances possibles. Ils apparaissent aussi au scan habituel, avec le bouton Tout imprimer, sans sélection obligatoire. Le statut de livraison ne bloque pas leur affichage.</p>
 <input id="vineQuarantineFilter" placeholder="Numéro de suivi, ASIN ou nom du produit" style="width:100%">
 <div id="vineQuarantineList"></div>
 </details>
@@ -2533,7 +2533,7 @@ function updateLabelSizeUi() {
 
   const printBtn = document.getElementById('printM110Btn');
   if (printBtn && printBtn.dataset.count) {
-    printBtn.textContent = `🖨️ Imprimer sur M110 (${printBtn.dataset.count} étiquette(s)) — ${size.width}×${size.height} mm`;
+    printBtn.textContent = `🖨️ Tout imprimer sur M110 (${printBtn.dataset.count} étiquette(s)) — ${size.width}×${size.height} mm`;
   }
   try {
     localStorage.setItem('m110LabelSizePreset', preset);
@@ -4356,24 +4356,11 @@ function renderVineQuarantine(container, candidates) {
   const groups=new Map();
   candidates.forEach(r=>{const a=groups.get(r.trackingRaw)||[];a.push(r);groups.set(r.trackingRaw,a);});
   for (const [tracking,items] of groups) {
-    const card=document.createElement('div');card.style.cssText='border:1px solid #d29422;padding:12px;margin:12px 0;border-radius:8px';
-    const title=document.createElement('strong');title.textContent=tracking+' — '+items.length+' article(s) à vérifier';card.append(title);
-    const choices=[];
-    for(const item of items) {
-      const label=document.createElement('label');label.style.cssText='display:block;margin:12px 0';
-      const check=document.createElement('input');check.type='checkbox';choices.push({check,item});
-      const reason=item.reason==='cross_account'?'Plusieurs comptes':item.reason==='carrier_mismatch'?'Transporteurs différents':'Dates insuffisantes ou éloignées';
-      label.append(check,document.createTextNode(' '+item.productName+' · '+item.asin+' · '+item.account+' · commande '+item.orderId+' · '+item.orderDate+' · '+reason));card.append(label);
-    }
-    const print=document.createElement('button');print.className='btn';print.textContent='Confirmer les produits cochés et imprimer';print.disabled=true;
-    choices.forEach(({check})=>check.addEventListener('change',()=>{print.disabled=!choices.some(x=>x.check.checked);}));
-    print.addEventListener('click',async()=>{
-      const picked=choices.filter(x=>x.check.checked).map(x=>x.item);if(!picked.length)return;
-      const matches=picked.map(r=>{const second=findSecondMatchByAsin(r.asin);return {...r,pdfBarcodeValue:second?.barcodeValue||r.asin,matchedSecondAsinRaw:second?.asinRaw||'',usedFallbackAsin:!second?.barcodeValue};});
-      print.disabled=true;
-      try {await manualPrintM110(matches,tracking);} finally {print.disabled=false;}
-    });
-    card.append(print);container.append(card);
+    const card=document.createElement('div');card.style.cssText='margin:12px 0';
+    const title=document.createElement('p');title.textContent=tracking+' — '+items.length+' article(s) — Association à vérifier';
+    const button=document.createElement('button');button.className='btn';button.textContent='Afficher les produits';
+    button.addEventListener('click',()=>{document.getElementById('scanInput').value=tracking;search(tracking,{skipRefresh:true});document.getElementById('result').scrollIntoView({behavior:'smooth',block:'start'});});
+    card.append(title,button);container.append(card);
   }
 }
 document.getElementById('vineQuarantineFilter').addEventListener('input',filterVineQuarantine);
@@ -5076,18 +5063,15 @@ function search(value, options = {}) {
     countDiv.textContent = "";
     return 0;
   }
-  const quarantineMatches = vineQuarantineRows.filter(r => trackingRowMatchesInput(r, value));
-  if (quarantineMatches.length) {
-    renderVineQuarantine(resultDiv, quarantineMatches);
-    countDiv.textContent = 'Association à vérifier : sélectionne les produits réellement présents dans le colis.';
+  if (rows.length === 0 && vineQuarantineRows.length === 0) {
+    resultDiv.innerHTML = '<div class="empty">Chargez d’abord une source.</div>';
     return 0;
   }
-  if (rows.length === 0) {
-    resultDiv.innerHTML = '<div class="empty">Chargez d\'abord un fichier ci-dessus.</div>';
-    return 0;
-  }
-
-  const matches = rows.filter(r => trackingRowMatchesInput(r, value)).map(r => {
+  const safeMatches = rows.filter(r => trackingRowMatchesInput(r, value));
+  const extraMatches = vineQuarantineRows.filter(r => trackingRowMatchesInput(r, value))
+    .filter(r => !safeMatches.some(s => s.asin === r.asin))
+    .map(r => ({...r, associationAmbiguous:true}));
+  const matches = [...safeMatches, ...extraMatches].map(r => {
     const second = findSecondMatchByAsin(r.asin);
     return {
       ...r,
@@ -5105,21 +5089,23 @@ function search(value, options = {}) {
 
   countDiv.innerHTML = `<span class="found">✅ ${matches.length} article(s) trouvé(s) pour ce colis (scan: ${escapeHtml(value)})</span>`;
 
+  const hasAmbiguous = matches.some(r => r.associationAmbiguous);
+  if (hasAmbiguous) countDiv.innerHTML += '<p>Association à vérifier — tous les produits associés sont affichés.</p>';
   recordOpeningScan(value, matches);
 
   // V13 : dès l’ouverture, le catalogue commun est alimenté pour le téléphone du rangeur.
-  queueCloudCatalogMatches(matches);
+  queueCloudCatalogMatches(matches.filter(r => !r.associationAmbiguous));
 
   const labelSize = getSelectedLabelSize();
   let html = '<div style="margin-bottom:10px; display:flex; gap:8px; flex-wrap:wrap;">'
-    + '<button class="btn m110-print-btn" id="printM110Btn" data-count="' + matches.length + '">🖨️ Imprimer sur M110 (' + matches.length + ' étiquette(s)) — ' + labelSize.width + '×' + labelSize.height + ' mm</button>'
+    + '<button class="btn m110-print-btn" id="printM110Btn" data-count="' + matches.length + '">🖨️ Tout imprimer sur M110 (' + matches.length + ' étiquette(s)) — ' + labelSize.width + '×' + labelSize.height + ' mm</button>'
     + '<button class="btn" id="downloadPdfBtn">📄 Télécharger le PDF (' + matches.length + ' code(s)-barres)</button>'
     + '</div>';
   html += '<table><tr><th>ASIN</th><th>Nom du produit</th><th>N° de suivi</th><th>Valeur encodée</th><th>Action</th></tr>';
   matches.forEach((m, index) => {
     html += `<tr>
       <td><strong>${escapeHtml(m.asin)}</strong></td>
-      <td>${escapeHtml(m.productName) || '<em>Non disponible</em>'}</td>
+      <td>${escapeHtml(m.productName) || '<em>Non disponible</em>'}${m.associationAmbiguous ? '<br><small>Association à vérifier</small>' : ''}</td>
       <td>${escapeHtml(m.trackingRaw)}</td>
       <td><strong>${escapeHtml(m.pdfBarcodeValue)}</strong></td>
       <td><button class="barcode-btn m110-print-one" data-index="${index}">🖨️ Imprimer</button></td>
@@ -5144,7 +5130,7 @@ function search(value, options = {}) {
 
   // Seulement 1 produit => impression automatique si l'option est active.
   // Plusieurs produits => aucun départ automatique.
-  maybeAutoPrintSingle(matches, value);
+  if (!hasAmbiguous) maybeAutoPrintSingle(matches, value);
 
   // V34 : la caméra peut savoir immédiatement si le code existe dans la base.
   return matches.length;
@@ -7308,7 +7294,7 @@ window.addEventListener("DOMContentLoaded", () => {
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "42.0.1";
+const APP_VERSION = "42.0.2";
 try {
   const el = document.getElementById('appVersionText');
   if (el) el.textContent = `v${APP_VERSION}`;
