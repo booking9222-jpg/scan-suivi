@@ -6,8 +6,8 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="40.3.23">
-<title>Scanner Suivi → ASIN → M110 — V40.3.23 + VINE Tracking V3.3.7</title>
+<meta name="app-version" content="41.1.0">
+<title>Scanner Suivi → ASIN → M110 — V41.1.0 + VINE Tracking V3.3.7</title>
 <script src="./Dernier Fonctionnel_files/xlsx.full.min.js.télécharger"></script>
 <script src="./Dernier Fonctionnel_files/html5-qrcode.min.js.télécharger"></script>
 <script src="./Dernier Fonctionnel_files/JsBarcode.all.min.js.télécharger"></script>
@@ -450,7 +450,7 @@
 <!-- V21 : M110 Ultra sûr 128 octets, optimisé 1-13 -->
 
 <h1>📦 Vine : ouverture → M110 → rangement synchronisé</h1>
-<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v31</strong></div>
+<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v41.1.0</strong></div>
 
 <div class="team-workflow-card" id="teamWorkflowCard">
   <div class="team-workflow-title">⚙️ Organisation du travail</div>
@@ -581,7 +581,7 @@
       Si la M110 saute encore une étiquette blanche, charge le rouleau bien droit puis appuie une fois sur le bouton d'avance papier pour qu'elle reconnaisse le format avant de relancer le test de 3 étiquettes.
     </div>
     <div id="m110TransportInfo" class="mini-note" style="margin-top:5px; font-weight:700; color:#0d47a1;">
-      Transport : 128 octets maximum. Extra Extra Safe descend à 64 octets.
+      Compatibilité V41.1 : largeur raster réelle (40 mm = 320 points / 40 octets) + séquence M110 temporisée. Paquets ≤ 128 octets.
     </div>
 
     <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;font-weight:900;color:#4527a0;">
@@ -1054,7 +1054,7 @@ function updateM110SpeedHint() {
   } else if (select.value === 'turbo') {
     hint.textContent = "Turbo fiable 128 : même transport sûr en 128 octets, avec un peu plus de marge entre les étiquettes.";
   } else if (select.value === 'extrasafe') {
-    hint.textContent = "Extra Extra Safe : priorité maximale à la fiabilité. Paquets de 64 octets, une seule écriture à la fois, accusé de réception GATT si disponible, réinitialisation avant chaque étiquette et longues pauses de vidage du tampon. C'est volontairement beaucoup plus lent.";
+    hint.textContent = "Extra Extra Safe : priorité maximale à la fiabilité. Paquets de 64 octets, une seule écriture à la fois et longues pauses. La V41.1 privilégie Write Without Response, comme le protocole M110 documenté.";
   } else if (select.value === 'safe') {
     hint.textContent = 'Compatible : très prudent, mais moins conservateur que Extra Extra Safe.';
   } else if (select.value === 'normal') {
@@ -2013,6 +2013,12 @@ async function finishM110Connection(device, silent = false, maxAttempts = 3) {
       saveCurrentM110PrinterProfile('connexion réussie');
 
       setM110Status(`✅ ${device.name || 'M110'} connectée — prête à imprimer`, 'ok');
+      try {
+        const cUuid = String(m110WriteChar?.uuid || '').toLowerCase();
+        const sUuid = String(m110Service?.uuid || '').toLowerCase();
+        const mode = m110WriteChar?.properties?.writeWithoutResponse ? 'Write Without Response' : 'Write With Response';
+        setM110TransportInfo(`Bluetooth : service ${sUuid || '?'} · écriture ${cUuid || '?'} · ${mode} · V41.1 largeur raster réelle.`);
+      } catch (_) {}
       updateM110Buttons();
       updateM110PrinterProfileInfo();
       await refreshLastM110AuthorizationState();
@@ -2160,16 +2166,30 @@ async function m110Send(bytes) {
   const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
 
   try {
-    if (m110UseWriteWithResponse) {
-      await m110WriteChar.writeValue(data);
-    } else {
+    const canWnr = !!m110WriteChar?.properties?.writeWithoutResponse;
+    const canWr = !!m110WriteChar?.properties?.write;
+
+    if (canWnr && !m110UseWriteWithResponse) {
+      // Le protocole M110 documenté utilise Write Without Response (ATT 0x52).
+      // On réessaie une fois le même mode en cas de petit accroc Android, sans
+      // basculer définitivement en Write With Response.
       try {
         await m110WriteChar.writeValueWithoutResponse(data);
-      } catch (_) {
-        m110UseWriteWithResponse = true;
-        await m110WriteChar.writeValue(data);
+      } catch (firstErr) {
+        await sleep(35);
+        try {
+          await m110WriteChar.writeValueWithoutResponse(data);
+        } catch (secondErr) {
+          if (!canWr) throw secondErr;
+          await m110WriteChar.writeValue(data);
+        }
       }
+    } else if (canWr) {
+      await m110WriteChar.writeValue(data);
+    } else {
+      throw new Error('Caractéristique Bluetooth M110 non inscriptible');
     }
+
     m110LastIoAt = Date.now();
   } catch (err) {
     m110LastTransportErrorAt = Date.now();
@@ -2309,59 +2329,125 @@ function restoreLabelSizeUi() {
   updateLabelSizeUi();
 }
 
+// V41.1 — IMPORTANT : le champ GS v 0 doit annoncer la largeur REELLE du raster.
+// 40 mm à 203 dpi = 320 points = 40 octets/ligne. L'ancienne version annonçait
+// toujours 48 octets (384 points), même pour une étiquette 40 mm. Les anciens
+// firmwares le toléraient, mais des M110 récentes peuvent accepter le transfert
+// GATT puis jeter silencieusement le travail.
 function m110CanvasToRaster(labelCanvas) {
-  const outputWidthBytes = M110_HEAD_BYTES;
   const ctx = labelCanvas.getContext('2d', { willReadFrequently: true });
-  const image = ctx.getImageData(0, 0, labelCanvas.width, labelCanvas.height);
-  const srcWidthBytes = Math.ceil(labelCanvas.width / 8);
-  const xOffsetBytes = Math.max(0, Math.floor((outputWidthBytes - srcWidthBytes) / 2));
-  const out = new Uint8Array(outputWidthBytes * labelCanvas.height);
+  const widthDots = Math.max(1, Math.min(M110_HEAD_DOTS, Math.round(labelCanvas.width)));
+  const heightLines = Math.max(1, Math.round(labelCanvas.height));
+  const outputWidthBytes = Math.ceil(widthDots / 8);
 
-  for (let y = 0; y < labelCanvas.height; y++) {
-    for (let x = 0; x < labelCanvas.width; x++) {
-      const p = (y * labelCanvas.width + x) * 4;
+  if (outputWidthBytes > M110_HEAD_BYTES) {
+    throw new Error(`Raster M110 trop large : ${widthDots} points (${outputWidthBytes} octets/ligne)`);
+  }
+
+  const image = ctx.getImageData(0, 0, widthDots, heightLines);
+  const out = new Uint8Array(outputWidthBytes * heightLines);
+
+  for (let y = 0; y < heightLines; y++) {
+    for (let x = 0; x < widthDots; x++) {
+      const p = (y * widthDots + x) * 4;
       const brightness = 0.299 * image.data[p] + 0.587 * image.data[p + 1] + 0.114 * image.data[p + 2];
       if (brightness < 185) {
-        const byteX = Math.floor(x / 8) + xOffsetBytes;
-        if (byteX >= 0 && byteX < outputWidthBytes) {
-          out[y * outputWidthBytes + byteX] |= (1 << (7 - (x % 8)));
-        }
+        const byteX = Math.floor(x / 8);
+        out[y * outputWidthBytes + byteX] |= (1 << (7 - (x % 8)));
       }
     }
   }
-  return { data: out, widthBytes: outputWidthBytes, heightLines: labelCanvas.height };
+
+  return {
+    data: out,
+    widthBytes: outputWidthBytes,
+    widthDots,
+    heightLines
+  };
+}
+
+// V41.1 — profil filaire conservateur commun aux M110 anciennes et récentes.
+// Les réglages UI restent disponibles, mais on n'envoie jamais plus vite que
+// la séquence M110 documentée : commandes séparées, 128 octets max, ~20 ms
+// entre paquets, ~30 ms entre commandes, 300 ms avant footer.
+function getM110WireProfile(baseProfile = null) {
+  const base = baseProfile || getM110SpeedProfile();
+  return {
+    ...base,
+    chunkSize: Math.max(32, Math.min(128, Number(base.chunkSize || 128))),
+    burstSize: 1,
+    burstDelay: Math.max(20, Number(base.burstDelay || 0)),
+    commandDelay: Math.max(30, Number(base.commandDelay || 0)),
+    beforeFooter: Math.max(300, Number(base.beforeFooter || 0)),
+    afterFooter: Math.max(500, Number(base.afterFooter || 0)),
+    betweenLabels: Math.max(500, Number(base.betweenLabels || 0)),
+    // Le chemin M110 documenté utilise prioritairement Write Without Response.
+    forceResponse: false
+  };
+}
+
+function validateM110Raster(raster) {
+  if (!raster || !(raster.data instanceof Uint8Array)) {
+    throw new Error('Raster M110 invalide');
+  }
+  const widthBytes = Number(raster.widthBytes || 0);
+  const heightLines = Number(raster.heightLines || 0);
+  if (!Number.isInteger(widthBytes) || widthBytes < 1 || widthBytes > M110_HEAD_BYTES) {
+    throw new Error(`Largeur raster M110 invalide : ${widthBytes} octets/ligne`);
+  }
+  if (!Number.isInteger(heightLines) || heightLines < 1 || heightLines > 65535) {
+    throw new Error(`Hauteur raster M110 invalide : ${heightLines} lignes`);
+  }
+  const expected = widthBytes * heightLines;
+  if (raster.data.length !== expected) {
+    throw new Error(`Raster M110 incohérent : ${raster.data.length} octets reçus, ${expected} attendus`);
+  }
+}
+
+async function sendM110RasterJob(raster, density = 6, profile = null, onProgress = null) {
+  validateM110Raster(raster);
+  const p = getM110WireProfile(profile);
+  const densityValue = Math.round(5 + Math.max(1, Math.min(8, density)) * 1.25);
+
+  // Chaque commande de configuration reste une écriture séparée.
+  await m110SendProfile([0x1b, 0x4e, 0x0d, 0x05], p); // vitesse
+  await sleep(p.commandDelay);
+  await m110SendProfile([0x1b, 0x4e, 0x04, densityValue], p); // densité
+  await sleep(p.commandDelay);
+  await m110SendProfile([0x1f, 0x11, 0x0a], p); // média : étiquettes avec gap
+  await sleep(p.commandDelay);
+
+  const h = raster.heightLines;
+  await m110SendProfile(new Uint8Array([
+    0x1d, 0x76, 0x30, 0x00,
+    raster.widthBytes & 0xff, (raster.widthBytes >> 8) & 0xff,
+    h & 0xff, (h >> 8) & 0xff
+  ]), p);
+
+  // Laisse le firmware armer le mode raster avant le premier bloc image.
+  await sleep(Math.max(20, Number(p.preRasterDelay || 0)));
+
+  const transport = await sendRasterPayloadM110(raster.data, p, onProgress);
+
+  await sleep(p.beforeFooter);
+  await m110SendProfile([0x1f, 0xf0, 0x05, 0x00, 0x1f, 0xf0, 0x03, 0x00], p);
+  await sleep(p.afterFooter);
+
+  return { ...transport, profile: p };
 }
 
 async function printRasterM110(raster, density = 6, onProgress = null) {
   if (!isM110Connected()) throw new Error('M110 non connectée');
 
-  const densityValue = Math.round(5 + Math.max(1, Math.min(8, density)) * 1.25);
-  const profile = getM110SpeedProfile();
   const startedAt = performance.now();
-
-  await m110Send([0x1b, 0x4e, 0x0d, 0x05]);
-  await sleep(profile.commandDelay);
-  await m110Send([0x1b, 0x4e, 0x04, densityValue]);
-  await sleep(profile.commandDelay);
-  await m110Send([0x1f, 0x11, 0x0a]);
-  await sleep(profile.commandDelay);
-
-  const h = raster.heightLines;
-  await m110Send(new Uint8Array([
-    0x1d, 0x76, 0x30, 0x00,
-    raster.widthBytes & 0xff, (raster.widthBytes >> 8) & 0xff,
-    h & 0xff, (h >> 8) & 0xff
-  ]));
-
-  const transport = await sendRasterPayloadM110(raster.data, profile, onProgress);
-
-  await sleep(profile.beforeFooter);
-  await m110Send([0x1f, 0xf0, 0x05, 0x00, 0x1f, 0xf0, 0x03, 0x00]);
-  await sleep(profile.afterFooter);
-
+  const transport = await sendM110RasterJob(raster, density, getM110SpeedProfile(), onProgress);
   const elapsed = Math.round(performance.now() - startedAt);
-  const responseText = profile.forceResponse && m110WriteChar?.properties?.write ? ' · accusés GATT' : '';
-  setM110TransportInfo(`Transport : ${transport.chunkSize} octets/paquet · ${transport.writes} écritures${responseText} · ${(elapsed / 1000).toFixed(2)} s.`);
+
+  setM110TransportInfo(
+    `M110 V41.1 : ${raster.widthBytes * 8}×${raster.heightLines} points · ` +
+    `${raster.widthBytes} octets/ligne · ${transport.chunkSize} octets/paquet · ` +
+    `${transport.writes} écritures · ${(elapsed / 1000).toFixed(2)} s.`
+  );
   return elapsed;
 }
 
@@ -2810,103 +2896,40 @@ async function printRasterBatchM110(rasters, density = 6, onLabelProgress = null
   const list = Array.isArray(rasters) ? rasters : [];
   if (!list.length) return { elapsedMs: 0, chunkSize: 128, writes: 0, microBatches: 0 };
 
-  const densityValue = Math.round(5 + Math.max(1, Math.min(8, density)) * 1.25);
-  const profile = getM110SpeedProfile();
+  // V41.1 : pour maximiser la compatibilité (FW 1.x et 2.x), chaque étiquette
+  // est un job M110 complet. Cela évite qu'un firmware récent considère la
+  // seconde image comme la continuation d'un raster précédent.
+  const profile = getM110WireProfile(getM110SpeedProfile());
   const startedAt = performance.now();
-
-  // V24 : la M110 devient parfois instable après 5 étiquettes rapides.
-  // On limite donc chaque sous-lot à 5 puis on laisse le tampon se vider
-  // et on réinitialise proprement les réglages avant de continuer.
-  const currentSize = getSelectedLabelSize();
-  const configuredMicroBatch = Math.max(1, Number(profile.microBatchSize || 5));
-  const MICRO_BATCH_SIZE =
-    currentSize.formatMode === 'long70'
-      ? Math.min(3, configuredMicroBatch)
-      : configuredMicroBatch;
-  const microBatches = Math.ceil(list.length / MICRO_BATCH_SIZE);
   let totalWrites = 0;
-  let globalIndex = 0;
 
-  async function initPrinterForMicroBatch() {
-    await m110Send([0x1b, 0x4e, 0x0d, 0x05]);
-    await sleep(profile.commandDelay);
-    await m110Send([0x1b, 0x4e, 0x04, densityValue]);
-    await sleep(profile.commandDelay);
-    await m110Send([0x1f, 0x11, 0x0a]);
-    await sleep(profile.commandDelay);
-  }
+  for (let i = 0; i < list.length; i++) {
+    const raster = list[i];
+    const result = await sendM110RasterJob(raster, density, profile, null);
+    totalWrites += result.writes;
 
-  for (let batchIndex = 0; batchIndex < microBatches; batchIndex++) {
-    const batchStart = batchIndex * MICRO_BATCH_SIZE;
-    const batchEnd = Math.min(batchStart + MICRO_BATCH_SIZE, list.length);
+    if (onLabelProgress) onLabelProgress(i + 1, list.length);
 
-    await initPrinterForMicroBatch();
-
-    for (let i = batchStart; i < batchEnd; i++) {
-      const raster = list[i];
-      const h = raster.heightLines;
-
-      // Protection particulière de la dernière étiquette d'un lot >= 6 :
-      // on laisse le tampon respirer avant de commencer la dernière image,
-      // puis on l'envoie sans mini-rafale.
-      const isGlobalLast = i === list.length - 1;
-      if (isGlobalLast && list.length >= 6) {
-        await sleep(420);
-      }
-
-      await m110Send(new Uint8Array([
-        0x1d, 0x76, 0x30, 0x00,
-        raster.widthBytes & 0xff, (raster.widthBytes >> 8) & 0xff,
-        h & 0xff, (h >> 8) & 0xff
-      ]));
-
-      const safeProfile = (isGlobalLast && list.length >= 6)
-        ? {
-            ...profile,
-            burstSize: 1,
-            burstDelay: Math.max(10, profile.burstDelay || 0)
-          }
-        : profile;
-
-      const transport = await sendRasterPayloadM110(raster.data, safeProfile);
-      totalWrites += transport.writes;
-
-      // Un peu plus de marge avant le footer sur la dernière étiquette.
-      await sleep(
-        isGlobalLast && list.length >= 6
-          ? Math.max(200, profile.beforeFooter || 0)
-          : profile.beforeFooter
-      );
-
-      await m110Send([0x1f, 0xf0, 0x05, 0x00, 0x1f, 0xf0, 0x03, 0x00]);
-
-      globalIndex++;
-      if (onLabelProgress) onLabelProgress(globalIndex, list.length);
-
-      const isEndOfMicroBatch = i === batchEnd - 1;
-      const isVeryLast = i === list.length - 1;
-
-      if (isVeryLast) {
-        await sleep(Math.max(650, profile.afterFooter || 0));
-      } else if (isEndOfMicroBatch) {
-        // 40×70 = beaucoup plus de données : vidage de tampon renforcé.
-        await sleep(
-          currentSize.formatMode === 'long70'
-            ? Math.max(1350, Number(profile.microBatchPause || 0))
-            : Math.max(950, Number(profile.microBatchPause || 0))
-        );
-      } else {
-        await sleep(profile.betweenLabels);
-      }
+    if (i < list.length - 1) {
+      // Le footer a déjà sa pause; cette marge supplémentaire laisse le capteur
+      // de gap et le moteur se stabiliser avant le job suivant.
+      await sleep(profile.betweenLabels);
     }
   }
 
   const elapsedMs = Math.round(performance.now() - startedAt);
+  const first = list[0];
+  setM110TransportInfo(
+    `Lot M110 V41.1 : ${list.length} étiquette(s) · ` +
+    `${first.widthBytes * 8} points de large · ${profile.chunkSize} octets/paquet · ` +
+    `${totalWrites} écritures · ${(elapsedMs / 1000).toFixed(2)} s.`
+  );
+
   return {
     elapsedMs,
-    chunkSize: Math.max(32, Math.min(128, Number(profile.chunkSize || 128))),
+    chunkSize: profile.chunkSize,
     writes: totalWrites,
-    microBatches
+    microBatches: list.length
   };
 }
 
@@ -6830,7 +6853,7 @@ window.addEventListener("DOMContentLoaded", () => {
     updateM110SpeedHint();
     updateM110AdaptiveStatus('Réglage manuel mémorisé pour cette imprimante.');
     saveCurrentM110PrinterProfile('débit manuel');
-    setM110TransportInfo('Transport : 128 octets maximum. Extra Extra Safe descend à 64 octets.');
+    setM110TransportInfo('Compatibilité V41.1 : largeur raster réelle (40 mm = 320 points / 40 octets) + séquence M110 temporisée. Paquets ≤ 128 octets.');
   });
   document.getElementById('m110LayoutProfile').addEventListener('change', () => {
     updateM110LayoutHint();
@@ -6859,12 +6882,12 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 // =============================================================
-// V40.3.23 — diagnostic relais Cloudflare M110 + bouton de test
+// V41.1.0 — compatibilité M110 ancienne + firmware récent
 // - le navigateur vérifie toujours la dernière version de sw.js
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "40.3.23";
+const APP_VERSION = "41.1.0";
 try {
   const el = document.getElementById('appVersionText');
   if (el) el.textContent = `v${APP_VERSION}`;
@@ -6899,7 +6922,7 @@ async function installFreshServiceWorker() {
       location.reload();
     });
   } catch (err) {
-    console.warn("Service worker V40.3.23 non disponible :", err);
+    console.warn("Service worker V41.1.0 non disponible :", err);
   }
 }
 
