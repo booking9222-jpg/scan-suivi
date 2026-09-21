@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vine-scanner-v42.0.0-2026-09-21';
+const CACHE_NAME = 'vine-scanner-v42.0.1-quarantaine-2026-09-21';
 const CORE = ['./'];
 
 self.addEventListener('install', event => {
