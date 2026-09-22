@@ -6,8 +6,8 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="42.0.2">
-<title>Scanner Suivi → ASIN → M110 — V42.0.2 + VINE Tracking V3.3.7</title>
+<meta name="app-version" content="42.0.3">
+<title>Scanner Suivi → ASIN → M110 — V42.0.3 + VINE Tracking V3.3.7</title>
 <script src="./Dernier Fonctionnel_files/xlsx.full.min.js.télécharger"></script>
 <script src="./Dernier Fonctionnel_files/html5-qrcode.min.js.télécharger"></script>
 <script src="./Dernier Fonctionnel_files/JsBarcode.all.min.js.télécharger"></script>
@@ -450,7 +450,7 @@
 <!-- V21 : M110 Ultra sûr 128 octets, optimisé 1-13 -->
 
 <h1>📦 Vine : ouverture → M110 → rangement synchronisé</h1>
-<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v42.0.2</strong></div>
+<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v42.0.3</strong></div>
 
 <div class="team-workflow-card" id="teamWorkflowCard">
   <div class="team-workflow-title">⚙️ Organisation du travail</div>
@@ -5071,7 +5071,14 @@ function search(value, options = {}) {
   const extraMatches = vineQuarantineRows.filter(r => trackingRowMatchesInput(r, value))
     .filter(r => !safeMatches.some(s => s.asin === r.asin))
     .map(r => ({...r, associationAmbiguous:true}));
-  const matches = [...safeMatches, ...extraMatches].map(r => {
+  const seenAsins = new Set();
+  const uniqueMatches = [...safeMatches, ...extraMatches].filter(r => {
+    const asin = String(r.asin || '').trim().toUpperCase();
+    if (!asin || seenAsins.has(asin)) return false;
+    seenAsins.add(asin);
+    return true;
+  });
+  const matches = uniqueMatches.map(r => {
     const second = findSecondMatchByAsin(r.asin);
     return {
       ...r,
@@ -7294,7 +7301,7 @@ window.addEventListener("DOMContentLoaded", () => {
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "42.0.2";
+const APP_VERSION = "42.0.3";
 try {
   const el = document.getElementById('appVersionText');
   if (el) el.textContent = `v${APP_VERSION}`;
