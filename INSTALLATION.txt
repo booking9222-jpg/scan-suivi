@@ -1,0 +1,39 @@
+SCANNER M110 42.0.4 — SOURCES AU CHOIX
+
+INSTALLATION GITHUB
+1. Sauvegarder votre HTML actuel et sw.js.
+2. Remplacer Scanner-Suivi-M110-v12.html et sw.js dans votre dépôt scan-suivi.
+   Si votre page actuelle utilise un autre nom (par exemple index.html),
+   remplacer son contenu par le HTML fourni en gardant son nom actuel.
+3. Attendre la publication GitHub Pages, puis recharger l'application.
+4. Vérifier que le badge indique 42.0.4.
+Aucun changement Apps Script ou Cloudflare n'est nécessaire.
+
+UTILISATION
+1. Order History : sélectionner Google Sheets, GitHub ou Fichier Excel local.
+2. Correspondance : sélectionner GitHub ou Fichier Excel local.
+Les deux choix sont indépendants et mémorisés sur ce navigateur.
+Le bouton Charger / actualiser la source choisie recharge cette source.
+Choisir un fichier bascule automatiquement la section en mode local.
+Les copies GitHub et les fichiers manuels sont mémorisés séparément.
+Une réponse réseau d'une source abandonnée ne remplace pas la source choisie.
+En mode Google, configurer ORDER_HISTORY_URL comme auparavant.
+Pas de bascule automatique vers GitHub en cas d'échec Google.
+
+COLIS PARTAGES
+Un suivi présent dans plusieurs commandes est maintenant affiché au scan
+normal, avec Association à vérifier. Il n'est pas déclaré vérifié.
+Les couples suivi + ASIN sont regroupés (ASIN normalisé).
+Un même ASIN dans deux suivis distincts reste présent dans chacun.
+Les impressions manuelles restent accessibles; l'auto-impression des
+associations à vérifier reste désactivée selon la protection existante.
+Les lignes multi-suivi et les suivis invalides restent exclus.
+
+VERIFICATION
+Sur le fichier Order_History_12_fichiers_fusionnes(9).xlsx fourni :
+27 607 lignes entrantes, 27 209 lignes disponibles, 1 doublon regroupé,
+397 exclusions (73 multi-suivi, 324 suivis invalides).
+5 341 suivis partagés entre commandes ne sont plus exclus pour ce seul motif.
+Tests de syntaxe, dédoublonnage, choix indépendants et réponses périmées réussis.
+Bloc Bluetooth/impression conservé à l'identique.
+Pas de test physique M110 ni de déploiement GitHub effectué ici.

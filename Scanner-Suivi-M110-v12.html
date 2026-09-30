@@ -6,8 +6,8 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="42.0.3">
-<title>Scanner Suivi → ASIN → M110 — V42.0.3 + VINE Tracking V3.3.7</title>
+<meta name="app-version" content="42.0.4">
+<title>Scanner Suivi → ASIN → M110 — V42.0.4 + VINE Tracking V3.3.7</title>
 <script src="./Dernier Fonctionnel_files/xlsx.full.min.js.télécharger"></script>
 <script src="./Dernier Fonctionnel_files/html5-qrcode.min.js.télécharger"></script>
 <script src="./Dernier Fonctionnel_files/JsBarcode.all.min.js.télécharger"></script>
@@ -450,7 +450,7 @@
 <!-- V21 : M110 Ultra sûr 128 octets, optimisé 1-13 -->
 
 <h1>📦 Vine : ouverture → M110 → rangement synchronisé</h1>
-<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v42.0.3</strong></div>
+<div class="app-version-badge">Version actuelle : <strong id="appVersionText">v42.0.4</strong></div>
 
 <div class="team-workflow-card" id="teamWorkflowCard">
   <div class="team-workflow-title">⚙️ Organisation du travail</div>
@@ -636,7 +636,9 @@
 
 
 <div class="card">
-  <strong>1. Order History — VINE Tracking Google Sheets (prioritaire)</strong>
+  <strong>1. Order History</strong>
+<p><label>Source à utiliser <select id="primarySourceChoice"><option value="google">Google Sheets</option><option value="github">GitHub</option><option value="local">Fichier Excel local</option></select></label> <button class="btn" id="primarySourceReload" type="button">Charger / actualiser la source choisie</button></p>
+<p id="primarySourceState" role="status"></p>
   <div class="mini-note" style="margin:7px 0 9px;line-height:1.45;">
     Colle une seule fois la valeur <strong>ORDER_HISTORY_URL</strong> de l’onglet <strong>PARAMETRES</strong> de VINE Tracking. Ce lien utilise un jeton <strong>lecture seule</strong> distinct du scanner de réception.
     Les suivis + ASIN + titres seront chargés directement depuis Google Sheets, sans fichier Order History.
@@ -669,7 +671,7 @@
 <div id="vineQuarantineList"></div>
 </details>
   <hr style="border:0;border-top:1px solid #eee;margin:15px 0;">
-  <strong>Secours : fichier local / GitHub</strong><br>
+  <strong>Importer un fichier Excel local</strong><br>
   <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
   <div id="status">Aucun fichier chargé.</div>
   <div id="githubStatus1" class="github-file-status">☁️ GitHub : vérification automatique en attente…</div>
@@ -687,6 +689,8 @@
 
 <div class="card">
   <strong>2. Fichier de correspondance :</strong><br>
+<p><label>Source à utiliser <select id="secondarySourceChoice"><option value="github">GitHub</option><option value="local">Fichier Excel local</option></select></label> <button class="btn" id="secondarySourceReload" type="button">Charger / actualiser la source choisie</button></p>
+<p id="secondarySourceState" role="status"></p>
   <div style="font-size:13px;color:#555;margin:6px 0 10px;">La colonne A doit contenir l'ASIN, la colonne B le code-barres à utiliser dans le PDF.</div>
   <input type="file" id="fileInput2" accept=".xlsx,.xls,.csv">
   <div id="status2">Aucun 2e fichier chargé.</div>
@@ -709,8 +713,7 @@
       <button class="btn" id="githubSyncNowBtn" type="button" style="background:#2e7d32;">🔄 Vérifier maintenant</button>
     </div>
     <div class="mini-note" style="margin-top:7px;">
-      Avec une ORDER_HISTORY_URL VINE Tracking configurée, VINE Tracking est la source Order History prioritaire. GitHub reste automatiquement actualisé comme copie de secours ; hors ligne, la dernière copie VINE sûre enregistrée sur ce téléphone est essayée avant le secours GitHub/local.
-      Le fichier de correspondance ASIN → code-barres reste synchronisé depuis GitHub comme avant.
+      Chaque choix de source est mémorisé sur ce navigateur. GitHub ne remplace pas un fichier Excel local sélectionné.
     </div>
   </details>
 </div>
@@ -3922,7 +3925,7 @@ async function downloadGithubFile(kind, path, remoteMeta, forceApi = false) {
     lastModified:Number.isFinite(parsedDate) ? parsedDate : Date.now()
   };
 
-  const key = kind === "primary" ? "orderHistory" : "correspondence";
+  const key = kind === "primary" ? "orderHistoryGithub" : "correspondenceGithub";
   let parsedRowCount = null;
 
   if (kind === "secondary") {
@@ -3979,9 +3982,11 @@ async function downloadGithubFile(kind, path, remoteMeta, forceApi = false) {
 }
 
 async function syncOneGithubFile(kind, path, quiet = false, forceDownload = false, options = {}) {
+  if (sourceChoice(kind) !== "github") return {skipped:true};
+  const sourceEpoch = sourceEpochs[kind];
   const applyToRows = options.applyToRows !== false;
   const label = kind === "primary" ? "Order History" : "Correspondance";
-  const key = kind === "primary" ? "orderHistory" : "correspondence";
+  const key = kind === "primary" ? "orderHistoryGithub" : "correspondenceGithub";
   const statusKind = kind === "primary" ? "primary" : "secondary";
 
   if (!path) throw new Error(`Chemin GitHub manquant pour ${label}.`);
@@ -4001,9 +4006,10 @@ async function syncOneGithubFile(kind, path, quiet = false, forceDownload = fals
   const suspiciousLocal = kind === "secondary" && Number(localCorrespondenceCount || 0) <= 5;
   const mustDownload = forceDownload || suspiciousLocal || !remoteLooksSame(saved, remote);
 
+  if (!sourceResultAllowed(kind, {source:"github",sourceEpoch})) return {skipped:true};
   if (!mustDownload) {
     const meta = {
-      source:"github",
+      source:"github", sourceEpoch,
       githubPath:path,
       githubLastModified:saved.githubLastModified || remote.lastModified,
       lastModified:saved.lastModified,
@@ -4028,7 +4034,8 @@ async function syncOneGithubFile(kind, path, quiet = false, forceDownload = fals
     "wait");
 
   const downloaded = await downloadGithubFile(kind, path, remote, kind === "secondary");
-  const meta = downloaded.record;
+  const meta = {...downloaded.record, sourceEpoch};
+  if (!sourceResultAllowed(kind, meta)) return {skipped:true};
 
   if (kind === "primary") { if (applyToRows) processPrimaryFileData(downloaded.arrayBuffer, meta.name, true, meta); }
   else processSecondFileData(downloaded.arrayBuffer, meta.name, true, meta);
@@ -4051,8 +4058,9 @@ async function syncGithubFiles(forceDetect = false, forceDownload = false) {
   githubFilesSyncRunning = true;
 
   try {
+    if(sourceChoice("primary")!=="github" && sourceChoice("secondary")!=="github") return;
     const config = await autoDetectGithubFilePaths(forceDetect);
-    const vinePrimary = hasVineOrderHistorySource();
+    const vinePrimary = false;
     await Promise.all([
       // Toujours maintenir le backup GitHub à jour. Si VINE est configuré,
       // le téléchargement est mis en cache sans écraser les lignes VINE actives.
@@ -4127,6 +4135,7 @@ async function deleteSavedFileRecord(key) {
 }
 
 function hasVineOrderHistorySource() {
+  if(sourceChoice("primary")!=="google") return false;
   try { return !!String(localStorage.getItem(VT_ORDER_SOURCE_URL_KEY) || "").trim(); }
   catch (_) { return false; }
 }
@@ -4189,6 +4198,7 @@ async function getVineOrderHistorySnapshot(rawUrl) {
 }
 
 async function activateGithubOrderHistoryFallback(reason = "") {
+  if(sourceChoice("primary")!=="github") return false;
   const status = document.getElementById("vtOrderHistoryStatus");
   try {
     const config = await autoDetectGithubFilePaths(false);
@@ -4366,6 +4376,7 @@ function renderVineQuarantine(container, candidates) {
 document.getElementById('vineQuarantineFilter').addEventListener('input',filterVineQuarantine);
 
 function applyVineOrderHistoryPayload(payload, options = {}) {
+  if(sourceChoice("primary")!=="google") return rows.length;
   if (!payload || payload.ok !== true || !Array.isArray(payload.rows)) throw new Error(payload && payload.error ? payload.error : "Réponse VINE Tracking invalide.");
   setVineQuarantine(payload.quarantineRows);
   const srcRows = payload.rows;
@@ -4386,12 +4397,13 @@ function applyVineOrderHistoryPayload(payload, options = {}) {
   const transportNote = options.transport === "relay" ? " · ☁️ via relais Cloudflare" : "";
   document.getElementById("status").innerHTML = `✅ <strong>${rows.length}</strong> lignes chargées depuis <strong>VINE Tracking Google Sheets</strong>${builtText}${cacheNote}${transportNote}. Colonne suivi: <strong>Carrier Name &amp; Tracking Number</strong>, ASIN: <strong>ASIN</strong>, Produit: <strong>Product Name</strong>${excludedText}${sharedText}${conflictText}.`;
   document.getElementById("vtOrderHistoryStatus").innerHTML = `✅ Source Google ${options.cached ? "mémorisée" : "active"}${options.transport === "relay" ? " via relais Cloudflare" : ""} — <strong>${rows.length}</strong> ligne(s) sûres${excludedText}${sharedText}${conflictText}.`;
-  setGithubFileStatus("primary", "☁️ Order History fourni directement par VINE Tracking — GitHub conservé en secours.", "ok");
+  setGithubFileStatus("primary", "☁️ Order History fourni directement par VINE Tracking — Source Google Sheets sélectionnée.", "ok");
   searchByProductTitle(document.getElementById("productTitleSearch").value);
   return rows.length;
 }
 
 async function loadVineOrderHistorySource(options = {}) {
+  if(sourceChoice("primary")!=="google") return rows.length;
   if (vtOrderHistoryLoadInFlight) return vtOrderHistoryLoadInFlight;
   if (options.silent && Date.now() < vtOrderHistoryNextAttemptAt) return rows.length;
   const input = document.getElementById('vtOrderHistoryScannerUrl');
@@ -4401,7 +4413,7 @@ async function loadVineOrderHistorySource(options = {}) {
   try { buildVineOrderHistoryEndpoint(raw); localStorage.setItem(VT_ORDER_SOURCE_URL_KEY, raw); }
   catch (err) { status.textContent = '❌ '+err.message; return rows.length; }
   const generation = ++vtOrderHistoryGeneration, started = Date.now();
-  const current = () => generation === vtOrderHistoryGeneration && String(input.value || '').trim() === raw;
+  const current = () => sourceChoice('primary') === 'google' && generation === vtOrderHistoryGeneration && String(input.value || '').trim() === raw;
   vtOrderHistoryStage = 'Connexion';
   const progress = () => { if (current()) status.textContent = `⏳ ${vtOrderHistoryStage} · ${Math.floor((Date.now()-started)/1000)} s / 12 s · ${rows.length} lignes disponibles`; };
   progress(); const ticker = setInterval(progress,1000);
@@ -4522,7 +4534,7 @@ function initVineOrderHistorySource() {
     input.value=""; vtOrderHistoryLastLiveAt=0; vtOrderHistoryLastReadyAt=0; vtOrderHistoryLastReadySource=""; vtOrderHistoryPendingSearch=null;
     document.getElementById("vtOrderHistoryStatus").textContent="Source VINE Tracking oubliée. Activation du backup GitHub/local…";
     setVineQuarantine([]);
-    activateGithubOrderHistoryFallback("source oubliée");
+    rows=[]; document.getElementById("status").textContent="Choisis une source Order History.";
   });
   if(input.value&&auto.checked)loadVineOrderHistorySource({silent:true, timeoutMs:VT_ORDER_BACKGROUND_TIMEOUT_MS});
   startVineOrderHistoryAutoRefresh();
@@ -4569,6 +4581,75 @@ function normalize(s) {
   return String(s || "").toUpperCase().replace(/[\s\-_.]/g, "").trim();
 }
 
+
+const sourceEpochs={primary:0,secondary:0};
+function sourceChoice(kind){
+  try {
+    const saved=localStorage.getItem("m110-source-"+kind);
+    if((kind==="primary"?["google","github","local"]:["github","local"]).includes(saved))return saved;
+    return kind==="primary" && localStorage.getItem(VT_ORDER_SOURCE_URL_KEY) ? "google" : "github";
+  }catch(_){return "github";}
+}
+function sourceResultAllowed(kind,meta={}){
+  return sourceChoice(kind)===(meta.source==="github"?"github":"local") &&
+    (meta.sourceEpoch===undefined || meta.sourceEpoch===sourceEpochs[kind]);
+}
+function selectSource(kind,value){
+  sourceEpochs[kind]++;
+  localStorage.setItem("m110-source-"+kind,value);
+  document.getElementById(kind+"SourceChoice").value=value;
+  const label={google:"Google Sheets",github:"GitHub",local:"Fichier Excel local"}[value];
+  document.getElementById(kind+"SourceState").textContent="Source choisie : "+label;
+  document.getElementById("result").innerHTML="";
+  document.getElementById("count").textContent="";
+  if(kind==="primary"){
+    vtOrderHistoryGeneration++; rows=[];setVineQuarantine([]);
+    document.getElementById("status").textContent="Source changée : charge les données choisies.";
+    document.getElementById("result").innerHTML="";
+  }else{secondRows=[];document.getElementById("status2").textContent="Source changée : charge les correspondances choisies.";}
+}
+async function restoreSelectedSource(kind){
+  const choice=sourceChoice(kind),epoch=sourceEpochs[kind];
+  if(choice==="google"){
+    const raw=localStorage.getItem(VT_ORDER_SOURCE_URL_KEY)||"";
+    const cached=raw?await getVineOrderHistorySnapshot(raw):null;
+    if(epoch===sourceEpochs[kind] && sourceChoice(kind)===choice && cached?.payload){
+      validateVineOrderHistoryPayload(cached.payload,raw);applyVineOrderHistoryPayload(cached.payload,{cached:true});
+    }
+    return;
+  }
+  const base=kind==="primary"?"orderHistory":"correspondence";
+  let saved=await getSavedFile(base+(choice==="github"?"Github":""));
+  if(!saved && choice==="github")saved=await getSavedFile(base);
+  if(epoch!==sourceEpochs[kind] || sourceChoice(kind)!==choice)return;
+  if(saved?.data && (saved.source==="github"?"github":"local")===choice){
+    const process=kind==="primary"?processPrimaryFileData:processSecondFileData;
+    process(saved.data,saved.name||"Copie mémorisée",true,{...saved,sourceEpoch:epoch});
+  }
+}
+async function reloadSelectedSource(kind){
+  const epoch=sourceEpochs[kind],choice=sourceChoice(kind);
+  try{
+    await restoreSelectedSource(kind);
+    if(epoch!==sourceEpochs[kind])return;
+    if(choice==="google")await loadVineOrderHistorySource();
+    if(choice==="github"){
+      const config=await autoDetectGithubFilePaths(false);
+      if(epoch!==sourceEpochs[kind])return;
+      await syncOneGithubFile(kind,kind==="primary"?config.primaryPath:config.secondaryPath,false,true);
+    }
+    if(choice==="local")document.getElementById(kind+"SourceState").textContent="Source choisie : fichier Excel local. Utilise Choisir un fichier pour le remplacer.";
+  }catch(err){if(epoch===sourceEpochs[kind])document.getElementById(kind+"SourceState").textContent="Chargement impossible : "+String(err.message||err);}
+}
+function initSourceChoices(){
+  for(const kind of ["primary","secondary"]){
+    const choice=sourceChoice(kind),select=document.getElementById(kind+"SourceChoice");select.value=choice;
+    document.getElementById(kind+"SourceState").textContent="Source choisie : "+select.options[select.selectedIndex].text;
+    select.addEventListener("change",()=>{selectSource(kind,select.value);reloadSelectedSource(kind);});
+    document.getElementById(kind+"SourceReload").addEventListener("click",()=>reloadSelectedSource(kind));
+  }
+}
+
 function normalizeFallbackOrderId(value) {
   const v = String(value || "").trim();
   return /^\d{3}-\d{7}-\d{7}$/.test(v) ? v : "";
@@ -4605,6 +4686,7 @@ function quarantineFallbackOrderHistoryRows(inputRows) {
 
   const collisionTokens = new Set([...tokenOrders.entries()].filter(([, orders]) => orders.size > 1).map(([t]) => t));
   const safeRows = [];
+  const seenPairs=new Map(); let duplicateRows=0;
   const quarantinedRows = [];
   const reasonCounts = { multiTracking:0, invalidTracking:0, missingOrderId:0, crossOrderCollision:0 };
 
@@ -4617,12 +4699,22 @@ function quarantineFallbackOrderHistoryRows(inputRows) {
     } else if (!row.orderId) {
       reason = "missing_order_id"; reasonCounts.missingOrderId++;
     } else if (collisionTokens.has(row._fallbackUniqueToken)) {
-      reason = "cross_order_tracking"; reasonCounts.crossOrderCollision++;
+      reasonCounts.crossOrderCollision++;
     }
     const clean = { ...row };
     delete clean._fallbackUniqueToken;
     if (reason) quarantinedRows.push({ ...clean, fallbackQuarantineReason: reason });
-    else safeRows.push(clean);
+    else {
+      clean.asin=String(clean.asin||"").trim().toUpperCase();
+      clean.associationAmbiguous=collisionTokens.has(row._fallbackUniqueToken);
+      const key=row._fallbackUniqueToken+"|"+clean.asin;
+      if(clean.asin && seenPairs.has(key)){
+        duplicateRows++;
+        const previous=seenPairs.get(key);
+        if(!previous.productName)previous.productName=clean.productName;
+        if(!previous.photoUrl)previous.photoUrl=clean.photoUrl;
+      }else{safeRows.push(clean);if(clean.asin)seenPairs.set(key,clean);}
+    }
   }
 
   return {
@@ -4631,6 +4723,7 @@ function quarantineFallbackOrderHistoryRows(inputRows) {
     collisionTokens: [...collisionTokens],
     collisionTokenCount: collisionTokens.size,
     reasonCounts,
+    duplicateRows,
     totalRows: rowsIn.length
   };
 }
@@ -4662,6 +4755,7 @@ function detectColumns(headers) {
 }
 
 function processPrimaryFileData(arrayBuffer, fileName = "", restored = false, meta = {}) {
+  if (!sourceResultAllowed("primary", meta)) return;
   const data = new Uint8Array(arrayBuffer);
   const workbook = XLSX.read(data, { type: "array" });
   const sheetName = workbook.SheetNames[0];
@@ -4699,21 +4793,21 @@ function processPrimaryFileData(arrayBuffer, fileName = "", restored = false, me
   const imgColLabel = imgCol !== -1 ? `, colonne Photo: "<strong>${escapeHtml(headers[imgCol])}</strong>"` : ' — photo non fournie par ce fichier';
   const orderColLabel = oCol !== -1 ? `, colonne Commande: "<strong>${escapeHtml(headers[oCol])}</strong>"` : ' — ⚠️ colonne "Order ID" absente : lignes de secours mises en quarantaine';
   const q = quarantine.reasonCounts;
-  const quarantineText = quarantine.quarantinedRows.length
-    ? ` — 🛡️ ${quarantine.quarantinedRows.length} ligne(s) de secours exclue(s) (${quarantine.collisionTokenCount} tracking(s) réutilisé(s) entre commandes ; multi=${q.multiTracking}, tracking invalide=${q.invalidTracking}, OrderID absent=${q.missingOrderId}, collision=${q.crossOrderCollision})`
-    : ' — 🛡️ aucune collision de tracking inter-commandes détectée';
+  const quarantineText = ` — ${quarantine.collisionTokenCount} suivi(s) partagé(s) entre commandes affichés (association à vérifier). ${quarantine.duplicateRows} doublon(s) suivi + ASIN regroupé(s). ${quarantine.quarantinedRows.length} ligne(s) exclue(s) : multi-suivi=${q.multiTracking}, suivi invalide=${q.invalidTracking}, commande absente=${q.missingOrderId}.`;
   const restoredText = restored ? " — 💾 restauré automatiquement" : "";
   const fileText = fileName ? ` <span style="color:#555;">(${escapeHtml(fileName)})</span>` : "";
   document.getElementById("status").innerHTML =
-    `✅ ${rows.length} lignes sûres chargées${fileText}. Colonne suivi: "<strong>${escapeHtml(headers[tCol])}</strong>", colonne ASIN: "<strong>${escapeHtml(headers[aCol])}</strong>"${orderColLabel}${pColLabel}${imgColLabel}.${quarantineText}${restoredText}${fileMetaHtml(meta)}`;
+    `✅ ${rows.length} lignes chargées${fileText}. Colonne suivi: "<strong>${escapeHtml(headers[tCol])}</strong>", colonne ASIN: "<strong>${escapeHtml(headers[aCol])}</strong>"${orderColLabel}${pColLabel}${imgColLabel}.${quarantineText}${restoredText}${fileMetaHtml(meta)}`;
   searchByProductTitle(document.getElementById("productTitleSearch").value);
 }
 
 async function handleFile(file, shouldSave = true) {
+  selectSource("primary","local");
+  const sourceEpoch=sourceEpochs.primary;
   try {
     const arrayBuffer = await file.arrayBuffer();
-    processPrimaryFileData(arrayBuffer, file.name, false, { source:"local", lastModified:file.lastModified });
-    if (shouldSave) await saveFileLocally("orderHistory", file, arrayBuffer);
+    processPrimaryFileData(arrayBuffer, file.name, false, { source:"local", sourceEpoch, lastModified:file.lastModified });
+    if (shouldSave && sourceResultAllowed("primary",{source:"local",sourceEpoch})) await saveFileLocally("orderHistory", file, arrayBuffer);
     document.getElementById("scanInput").focus();
   } catch (err) {
     document.getElementById("status").textContent = "❌ Impossible de lire le fichier : " + err;
@@ -4855,6 +4949,7 @@ document.getElementById("clearProductSearch").addEventListener("click", function
 });
 
 function processSecondFileData(arrayBuffer, fileName = "", restored = false, meta = {}) {
+  if (!sourceResultAllowed("secondary", meta)) return;
   const data = new Uint8Array(arrayBuffer);
   const workbook = XLSX.read(data, { type: "array" });
   const sheetName = workbook.SheetNames[0];
@@ -4884,10 +4979,12 @@ function processSecondFileData(arrayBuffer, fileName = "", restored = false, met
 }
 
 async function handleSecondFile(file, shouldSave = true) {
+  selectSource("secondary","local");
+  const sourceEpoch=sourceEpochs.secondary;
   try {
     const arrayBuffer = await file.arrayBuffer();
-    processSecondFileData(arrayBuffer, file.name, false, { source:"local", lastModified:file.lastModified });
-    if (shouldSave) await saveFileLocally("correspondence", file, arrayBuffer);
+    processSecondFileData(arrayBuffer, file.name, false, { source:"local", sourceEpoch, lastModified:file.lastModified });
+    if (shouldSave && sourceResultAllowed("secondary",{source:"local",sourceEpoch})) await saveFileLocally("correspondence", file, arrayBuffer);
   } catch (err) {
     document.getElementById("status2").textContent = "❌ Impossible de lire le 2e fichier : " + err;
   }
@@ -4895,38 +4992,9 @@ async function handleSecondFile(file, shouldSave = true) {
 
 
 async function restoreSavedFiles() {
-  let rawVineUrl = "";
-  try { rawVineUrl = localStorage.getItem(VT_ORDER_SOURCE_URL_KEY) || ""; } catch (_) {}
-  const [primary, secondary, vineSnapshot] = await Promise.all([
-    getSavedFile("orderHistory"),
-    getSavedFile("correspondence"),
-    rawVineUrl ? getVineOrderHistorySnapshot(rawVineUrl) : Promise.resolve(null)
-  ]);
-
-  if (primary && primary.data && !vineSnapshot?.payload?.rows?.length) {
-    try {
-      processPrimaryFileData(primary.data, primary.name || "fichier mémorisé", true, primary);
-    } catch (err) {
-      document.getElementById("status").textContent = "⚠️ Fichier mémorisé trouvé mais impossible à restaurer.";
-    }
-  }
-
-  if (secondary && secondary.data) {
-    try {
-      processSecondFileData(secondary.data, secondary.name || "2e fichier mémorisé", true, secondary);
-    } catch (err) {
-      document.getElementById("status2").textContent = "⚠️ 2e fichier mémorisé trouvé mais impossible à restaurer.";
-    }
-  }
-
-  // Si une source VINE est configurée, la dernière copie VINE sûre est plus
-  // récente/prioritaire que l'ancien Order History GitHub restauré ci-dessus.
-  if (rawVineUrl && vineSnapshot && vineSnapshot.payload) {
-    try { validateVineOrderHistoryPayload(vineSnapshot.payload, rawVineUrl); applyVineOrderHistoryPayload(vineSnapshot.payload, { cached: true });
-      vtOrderHistoryLastReadyAt = Date.now(); vtOrderHistoryLastReadySource = 'cache'; }
-    catch (err) { console.warn("Snapshot VINE mémorisé refusé :", err); }
-  }
+  await Promise.all([restoreSelectedSource("primary"),restoreSelectedSource("secondary")]);
 }
+
 
 
 function findSecondMatchByAsin(asin) {
@@ -7223,6 +7291,7 @@ window.addEventListener("DOMContentLoaded", () => {
   checkRequiredStaticLibraries();
   updateGithubRepoInfo();
   fillGithubPathInputs();
+  initSourceChoices();
   restoreSavedFiles().finally(() => {
     // V3.3.3 : VINE Tracking devient la source Order History prioritaire.
     // GitHub reste la source automatique du fichier de correspondance et le secours Order History.
@@ -7301,7 +7370,7 @@ window.addEventListener("DOMContentLoaded", () => {
 // - la navigation HTML privilégie le réseau, puis le cache hors ligne
 // - un nouveau service worker prend la main immédiatement
 // =============================================================
-const APP_VERSION = "42.0.3";
+const APP_VERSION = "42.0.4";
 try {
   const el = document.getElementById('appVersionText');
   if (el) el.textContent = `v${APP_VERSION}`;
