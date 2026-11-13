@@ -1,9 +1,9 @@
 {
-  "generated_at": "2026-10-22T05:06:58",
+  "generated_at": "2026-11-13T22:43:51",
   "amazon": {
     "path": "Order_History_12_fichiers_fusionnes.xlsx",
-    "sha256": "99b91daf7a6cd685ef3f62d5cf64becb1b23af11f664574e6e931b5c81d19f60",
-    "size": 7621578
+    "sha256": "474b9bf3f1182300401de917aec42f434caa007322a931c7da9e3fc61aae0665",
+    "size": 7945644
   },
   "cdiscount": {
     "path": "ASIN_Code_Barre_Cdiscount.xlsx",
