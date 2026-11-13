@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-13T22:43:51",
+  "generated_at": "2026-11-13T22:45:03",
   "amazon": {
     "path": "Order_History_12_fichiers_fusionnes.xlsx",
     "sha256": "474b9bf3f1182300401de917aec42f434caa007322a931c7da9e3fc61aae0665",
@@ -7,7 +7,7 @@
   },
   "cdiscount": {
     "path": "ASIN_Code_Barre_Cdiscount.xlsx",
-    "sha256": "82cc6d50ac42d0235293434d6d6ab38b29cbcafc9413cccb38c249bafafba46e",
-    "size": 487100
+    "sha256": "8605eeba0de7a20bbf76e703ac318595e883277f57de18d95ac289f5efe442d8",
+    "size": 490225
   }
 }
